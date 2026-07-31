@@ -1,0 +1,213 @@
+# ─────────────────────────────────────────────
+# FONCTIONS
+# ─────────────────────────────────────────────
+_usage() {
+  local fn="$1" desc="$2" usage="$3"
+  echo -e "$(tput bold)$fn$(tput sgr0) — $desc\nUsage: $usage"
+}
+
+reminder() {
+  local filter="${1:-}"
+  local cat="${2:-}"
+
+  local -A sections
+  sections[kubernetes]="kexec klogs kforward"
+  sections[réseau]="tcpcheck portscan httpcheck listening"
+  sections[git]="gbf glogf gstats"
+  sections[fichiers]="ff fcd"
+  sections[divers]="genpass b64enc b64dec sysinfo fkill meteo reload"
+
+  echo ""
+  for section in kubernetes git réseau fichiers divers; do
+    [[ -n "$cat" && "$cat" != "$section" ]] && continue
+    echo -e "  \e[2m── $section\e[0m"
+    for fn in ${sections[$section]}; do
+      [[ -n "$filter" && "$fn" != *"$filter"* ]] && continue
+      local sig
+      sig=$(declare -f "$fn" 2>/dev/null | grep '_usage' | grep -o '"[^"]*"' | sed -n '3p' | tr -d '"')
+      printf "  \e[36m%-14s\e[0m \e[2m%s\e[0m\n" "$fn" "$sig"
+    done
+    echo ""
+  done
+  echo -e "  \e[2mmyhelp [filtre] [catégorie]\e[0m"
+  echo ""
+}
+
+cloudCnx() {
+  case "$1" in
+    fabrique)
+      export AWS_ACCESS_KEY_ID=""
+      export AWS_SECRET_ACCESS_KEY=""
+      export OVH_APPLICATION_KEY=""
+      export OVH_CONSUMER_KEY=""
+      export OVH_APPLICATION_SECRET=""
+      echo "☁️  OVH → Conserto FD"
+      ;;
+    fedea)
+      export AWS_ACCESS_KEY_ID=""
+      export AWS_SECRET_ACCESS_KEY=""
+      export OVH_APPLICATION_KEY=""
+      export OVH_CONSUMER_KEY=""
+      export OVH_APPLICATION_SECRET=""
+      echo "☁️  OVH → Fedea"
+      ;;
+    clear)
+      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY OVH_APPLICATION_KEY OVH_CONSUMER_KEY OVH_APPLICATION_SECRET
+      echo "🧹 env cloud cleared"
+      ;;
+    *)
+      echo "Usage: cloudCnx [fabrique|fedea|clear]"
+      ;;
+  esac
+}
+
+# ─────────────────────────────────────────────
+# KUBERNETES
+# ─────────────────────────────────────────────
+
+kexec() {
+  [[ "$1" == "-h" ]] && _usage "kexec" "exec shell sur un pod via fzf" "kexec [namespace]" && return 0
+  local ns="${1:--A}"
+  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
+  local pod
+  pod=$(kubectl get pods $flag --no-headers \
+    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
+    | fzf --prompt="pod > " | awk '{print $1"/"$2}')
+  [[ -n "$pod" ]] && kubectl exec -it -n "${pod%/*}" "${pod##*/}" -- sh
+}
+
+klogs() {
+  [[ "$1" == "-h" ]] && _usage "klogs" "tail logs d'un pod via fzf" "klogs [namespace]" && return 0
+  local ns="${1:--A}"
+  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
+  local pod
+  pod=$(kubectl get pods $flag --no-headers \
+    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
+    | fzf --prompt="pod > " | awk '{print $1"/"$2}')
+  [[ -n "$pod" ]] && kubectl logs -f -n "${pod%/*}" "${pod##*/}"
+}
+
+kforward() {
+  [[ "$1" == "-h" ]] && _usage "kpf" "port-forward sur un svc via fzf" "kpf [namespace] [port]" && return 0
+  local ns="${1:--A}" port="${2:-8080}"
+  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
+  local svc
+  svc=$(kubectl get svc $flag --no-headers \
+    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
+    | fzf --prompt="svc > " | awk '{print $1"/"$2}')
+  [[ -n "$svc" ]] && kubectl port-forward -n "${svc%/*}" "svc/${svc##*/}" "$port"
+}
+
+# ─────────────────────────────────────────────
+# RÉSEAU / DEBUG
+# ─────────────────────────────────────────────
+
+listening() {
+  [[ "$1" == "-h" ]] && _usage "listening" "qui écoute sur un port ?" "listening <port>" && return 0
+  ss -tulpn | grep ":${1}"
+}
+
+tcpcheck() {
+  [[ "$1" == "-h" ]] && _usage "tcpcheck" "test connectivité TCP" "tcpcheck <host> <port>" && return 0
+  timeout 3 bash -c "cat < /dev/null > /dev/tcp/$1/$2" \
+    && echo "✓ $1:$2 open" || echo "✗ $1:$2 closed"
+}
+
+portscan() {
+  [[ "$1" == "-h" ]] && _usage "portscan" "scan ports courants sans nmap" "portscan <host>" && return 0
+  local host="$1"
+  for port in 22 80 443 3306 5432 6379 8080 8443 9090 9200; do
+    timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null \
+      && echo "✓ $port open" || echo "✗ $port closed"
+  done
+}
+
+httpcheck() {
+  [[ "$1" == "-h" ]] && _usage "httpcheck" "vérifie les headers HTTP d'une URL" "httpcheck <url>" && return 0
+  curl -sI "$1" | head -20
+}
+
+# ─────────────────────────────────────────────
+# FICHIERS / NAVIGATION
+# ─────────────────────────────────────────────
+
+ff() {
+  [[ "$1" == "-h" ]] && _usage "ff" "trouver et ouvrir un fichier via fzf" "ff [dossier]" && return 0
+  local file
+  file=$(find "${1:-.}" -type f 2>/dev/null | fzf --prompt="file > ")
+  [[ -n "$file" ]] && ${EDITOR:-vim} "$file"
+}
+
+fcd() {
+  [[ "$1" == "-h" ]] && _usage "fcd" "cd dans un sous-dossier via fzf" "fcd [dossier]" && return 0
+  local dir
+  dir=$(find "${1:-.}" -type d 2>/dev/null | fzf --prompt="dir > ")
+  [[ -n "$dir" ]] && cd "$dir"
+}
+
+# ─────────────────────────────────────────────
+# PROCESS
+# ─────────────────────────────────────────────
+
+fkill() {
+  [[ "$1" == "-h" ]] && _usage "fkill" "kill un process via fzf" "fkill" && return 0
+  local pid
+  pid=$(ps aux | fzf --prompt="process > " --header-lines=1 | awk '{print $2}')
+  [[ -n "$pid" ]] && kill -9 "$pid" && echo "→ killed $pid"
+}
+
+topcpu() { ps aux --sort=-%cpu | head -11; }
+topmem() { ps aux --sort=-%mem | head -11; }
+
+# ─────────────────────────────────────────────
+# GIT
+# ─────────────────────────────────────────────
+
+gbf() {
+  [[ "$1" == "-h" ]] && _usage "gbf" "switch de branche via fzf" "gbf" && return 0
+  local branch
+  branch=$(git branch -a | fzf --prompt="branch > " | sed 's/remotes\/origin\///' | tr -d ' *')
+  [[ -n "$branch" ]] && git checkout "$branch"
+}
+
+glogf() {
+  [[ "$1" == "-h" ]] && _usage "glogf" "git log interactif avec preview diff" "glogf" && return 0
+  git log --oneline --all \
+    | fzf --preview 'git show --stat {1}' \
+    | awk '{print $1}' \
+    | xargs git show
+}
+
+gstats() {
+  [[ "$1" == "-h" ]] && _usage "gstats" "stats commits par auteur" "gstats" && return 0
+  git shortlog -sn --all
+}
+
+# ─────────────────────────────────────────────
+# DIVERS
+# ─────────────────────────────────────────────
+
+meteo() {
+  curl -s "wttr.in/${1:-Nantes}?format=3"
+}
+
+b64enc() { echo -n "$1" | base64; }
+b64dec() { echo -n "$1" | base64 -d; }
+
+genpass() {
+  [[ "$1" == "-h" ]] && _usage "genpass" "génère un mot de passe aléatoire" "genpass [longueur]" && return 0
+  tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom | head -c "${1:-32}"; echo
+}
+
+sysinfo() {
+  echo "Hostname : $(hostname)"
+  echo "OS       : $(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"')"
+  echo "Kernel   : $(uname -r)"
+  echo "Uptime   : $(uptime -p)"
+  echo "CPU      : $(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)"
+  echo "RAM      : $(free -h | awk '/Mem/{print $3"/"$2}')"
+  echo "Disk     : $(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')"
+  echo "IP       : $(hostname -I | awk '{print $1}')"
+}
+
+reload() { source ~/.bashrc && echo "→ .bashrc rechargé"; }
