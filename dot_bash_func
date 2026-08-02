@@ -16,30 +16,75 @@ _require_args() {
   return 2
 }
 
+_require_command() {
+  local name
+  for name in "$@"; do
+    command -v "$name" >/dev/null 2>&1 && continue
+    printf 'Commande requise introuvable : %s\n' "$name" >&2
+    return 127
+  done
+}
+
+_valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
 reminder() {
   local filter="${1:-}"
   local cat="${2:-}"
 
   local -A sections
-  sections[kubernetes]="kexec klogs kforward kctx kns"
-  sections[réseau]="tcpcheck portscan httpcheck listening"
-  sections[git]="gbf glogf gstats"
-  sections[fichiers]="ff fcd mkcd croot"
+  sections[kubernetes]="kexec klogs kforward kdebug kdecode"
+  sections[réseau]="tcpcheck portscan httpcheck listening waittcp waithttp tlscheck dnscheck"
+  sections[git]="gbf glogf gstats gwt gurl"
+  sections[fichiers]="ff fcd mkcd croot extract tmpcd"
   sections[processus]="fkill topcpu topmem"
-  sections[divers]="genpass b64enc b64dec sysinfo meteo reload"
+  sections[divers]="retry json path venv serve epoch genpass b64enc b64dec sysinfo meteo reload"
 
+  # Un nom de catégorie seul est accepté : `reminder kubernetes`.
+  if [[ -z "$cat" ]]; then
+    case "$filter" in
+      kubernetes | git | réseau | fichiers | processus | divers)
+        cat="$filter"
+        filter=""
+        ;;
+    esac
+  fi
+
+  local found=false
   echo ""
   for section in kubernetes git réseau fichiers processus divers; do
     [[ -n "$cat" && "$cat" != "$section" ]] && continue
-    echo -e "  \e[2m── $section\e[0m"
+    local heading=false
     for fn in ${sections[$section]}; do
       [[ -n "$filter" && "$fn" != *"$filter"* ]] && continue
-      local sig
-      sig=$(declare -f "$fn" 2>/dev/null | grep '_usage' | grep -o '"[^"]*"' | sed -n '3p' | tr -d '"')
-      printf "  \e[36m%-14s\e[0m \e[2m%s\e[0m\n" "$fn" "$sig"
+
+      local -a help_parts=()
+      local desc usage
+      mapfile -t help_parts < <(
+        declare -f "$fn" 2>/dev/null |
+          sed -n '/_usage/ {p;q;}' |
+          command grep -o '"[^"]*"'
+      )
+
+      desc="${help_parts[3]:-sans description}"
+      usage="${help_parts[4]:-$fn}"
+      desc="${desc#\"}"; desc="${desc%\"}"
+      usage="${usage#\"}"; usage="${usage%\"}"
+
+      if [[ "$heading" == false ]]; then
+        echo -e "  \e[2m── $section\e[0m"
+        heading=true
+      fi
+
+      printf "  \e[36m%-12s\e[0m \e[2m%-44s\e[0m \e[90m# %s\e[0m\n" \
+        "$fn" "$usage" "$desc"
+      found=true
     done
-    echo ""
+    [[ "$heading" == true ]] && echo ""
   done
+
+  [[ "$found" == false ]] && echo -e "  \e[2mAucune fonction trouvée.\e[0m\n"
   echo -e "  \e[2mreminder [filtre] [catégorie] (alias : myhelp)\e[0m"
   echo ""
 }
@@ -115,6 +160,48 @@ kforward() {
   [[ -n "$svc" ]] && kubectl port-forward -n "${svc%/*}" "svc/${svc##*/}" "$port"
 }
 
+kdebug() {
+  [[ "$1" == "-h" ]] && _usage "kdebug" "lance un conteneur éphémère de debug" "kdebug [namespace] [image]" && return 0
+  _require_command kubectl fzf || return
+  local ns="${1:--A}" image="${2:-busybox:1.36}"
+  local -a scope
+  [[ "$ns" == "-A" ]] && scope=(-A) || scope=(-n "$ns")
+  local pod container containers
+  pod=$(kubectl get pods "${scope[@]}" --no-headers \
+    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name |
+    fzf --prompt="pod à debugger > " | awk '{print $1"/"$2}')
+  [[ -n "$pod" ]] || return 0
+
+  containers=$(kubectl get pod -n "${pod%/*}" "${pod##*/}" \
+    -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}') || return
+  if [[ "$containers" == *$'\n'* ]]; then
+    container=$(printf '%s\n' "$containers" | sed '/^$/d' | fzf --prompt="conteneur cible > ")
+  else
+    container="$containers"
+  fi
+  [[ -n "$container" ]] || return 0
+
+  kubectl debug -it -n "${pod%/*}" "${pod##*/}" \
+    --image="$image" --target="$container" -- sh
+}
+
+kdecode() {
+  [[ "$1" == "-h" ]] && _usage "kdecode" "affiche un Secret Kubernetes décodé" "kdecode [namespace]" && return 0
+  _require_command kubectl fzf jq || return
+  local ns="${1:--A}"
+  local -a scope
+  [[ "$ns" == "-A" ]] && scope=(-A) || scope=(-n "$ns")
+  local secret
+  secret=$(kubectl get secrets "${scope[@]}" --no-headers \
+    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name |
+    fzf --prompt="secret > " | awk '{print $1"/"$2}')
+  [[ -n "$secret" ]] || return 0
+
+  printf '⚠ Affichage en clair du Secret %s\n' "$secret" >&2
+  kubectl get secret -n "${secret%/*}" "${secret##*/}" -o json |
+    jq -r '.data // {} | to_entries[] | "\(.key)=\(.value | @base64d)"'
+}
+
 # ─────────────────────────────────────────────
 # RÉSEAU / DEBUG
 # ─────────────────────────────────────────────
@@ -129,7 +216,7 @@ tcpcheck() {
   [[ "$1" == "-h" ]] && _usage "tcpcheck" "test connectivité TCP" "tcpcheck <host> <port>" && return 0
   _require_args 2 "$@" || return
   local host="$1" port="$2"
-  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
+  _valid_port "$port" || {
     printf 'Port invalide : %s\n' "$port" >&2
     return 2
   }
@@ -151,6 +238,92 @@ httpcheck() {
   [[ "$1" == "-h" ]] && _usage "httpcheck" "vérifie les headers HTTP d'une URL" "httpcheck <url>" && return 0
   _require_args 1 "$@" || return
   curl -fsSIL --max-time 10 "$1" | head -20
+}
+
+waittcp() {
+  [[ "$1" == "-h" ]] && _usage "waittcp" "attend qu'un port TCP réponde" "waittcp <host> <port> [timeout]" && return 0
+  _require_args 2 "$@" || return
+  _require_command timeout || return
+  local host="$1" port="$2" limit="${3:-60}" start=$SECONDS
+  _valid_port "$port" || {
+    printf 'Port invalide : %s\n' "$port" >&2
+    return 2
+  }
+  [[ "$limit" =~ ^[1-9][0-9]*$ ]] || {
+    printf 'Timeout invalide : %s\n' "$limit" >&2
+    return 2
+  }
+
+  printf 'Attente de %s:%s' "$host" "$port"
+  while (( SECONDS - start < limit )); do
+    if timeout 1 bash -c 'cat < /dev/null > "/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
+      printf '\n✓ %s:%s disponible\n' "$host" "$port"
+      return 0
+    fi
+    printf '.'
+    sleep 1
+  done
+  printf '\n✗ timeout après %ss\n' "$limit" >&2
+  return 124
+}
+
+waithttp() {
+  [[ "$1" == "-h" ]] && _usage "waithttp" "attend qu'une URL HTTP réponde" "waithttp <url> [timeout]" && return 0
+  _require_args 1 "$@" || return
+  _require_command curl || return
+  local url="$1" limit="${2:-60}" start=$SECONDS
+  [[ "$limit" =~ ^[1-9][0-9]*$ ]] || {
+    printf 'Timeout invalide : %s\n' "$limit" >&2
+    return 2
+  }
+
+  printf 'Attente de %s' "$url"
+  while (( SECONDS - start < limit )); do
+    if curl -fsS --max-time 2 -o /dev/null "$url" 2>/dev/null; then
+      printf '\n✓ URL disponible\n'
+      return 0
+    fi
+    printf '.'
+    sleep 1
+  done
+  printf '\n✗ timeout après %ss\n' "$limit" >&2
+  return 124
+}
+
+tlscheck() {
+  [[ "$1" == "-h" ]] && _usage "tlscheck" "inspecte le certificat TLS distant" "tlscheck <domaine> [port]" && return 0
+  _require_args 1 "$@" || return
+  _require_command openssl timeout || return
+  local host="$1" port="${2:-443}" pem
+  _valid_port "$port" || {
+    printf 'Port invalide : %s\n' "$port" >&2
+    return 2
+  }
+
+  pem=$(timeout 10 openssl s_client -servername "$host" \
+    -connect "$host:$port" </dev/null 2>/dev/null) || {
+      printf 'Connexion TLS impossible vers %s:%s\n' "$host" "$port" >&2
+      return 1
+    }
+  printf '%s\n' "$pem" | openssl x509 -noout \
+    -subject -issuer -dates -ext subjectAltName
+}
+
+dnscheck() {
+  [[ "$1" == "-h" ]] && _usage "dnscheck" "affiche les principaux enregistrements DNS" "dnscheck <domaine>" && return 0
+  _require_args 1 "$@" || return
+  _require_command dig || return
+  local type answer found=false
+  for type in A AAAA CNAME MX TXT; do
+    answer=$(dig +noall +answer "$1" "$type")
+    [[ -n "$answer" ]] || continue
+    printf '\n%s\n%s\n' "$type" "$answer"
+    found=true
+  done
+  [[ "$found" == true ]] || {
+    printf 'Aucun enregistrement trouvé pour %s\n' "$1" >&2
+    return 1
+  }
 }
 
 # ─────────────────────────────────────────────
@@ -204,6 +377,61 @@ croot() {
     return 1
   }
   cd -- "$root" || return
+}
+
+extract() {
+  [[ "$1" == "-h" ]] && _usage "extract" "extrait une archive selon son format" "extract <archive> [destination]" && return 0
+  _require_args 1 "$@" || return
+  local archive="$1" destination="${2:-.}" basename output
+  [[ -f "$archive" ]] || {
+    printf 'Archive introuvable : %s\n' "$archive" >&2
+    return 1
+  }
+  mkdir -p -- "$destination" || return
+
+  case "$archive" in
+    *.tar | *.tar.gz | *.tgz | *.tar.bz2 | *.tbz2 | *.tar.xz | *.txz | *.tar.zst)
+      _require_command tar || return
+      tar -xf "$archive" -C "$destination"
+      ;;
+    *.zip)
+      _require_command unzip || return
+      unzip "$archive" -d "$destination"
+      ;;
+    *.7z)
+      _require_command 7z || return
+      7z x "$archive" "-o$destination"
+      ;;
+    *.rar)
+      _require_command unrar || return
+      unrar x "$archive" "$destination/"
+      ;;
+    *.gz | *.bz2 | *.xz)
+      basename="${archive##*/}"
+      output="$destination/${basename%.*}"
+      [[ ! -e "$output" ]] || {
+        printf 'Le fichier existe déjà : %s\n' "$output" >&2
+        return 1
+      }
+      case "$archive" in
+        *.gz) _require_command gzip || return; gzip -dc -- "$archive" > "$output" ;;
+        *.bz2) _require_command bzip2 || return; bzip2 -dc -- "$archive" > "$output" ;;
+        *.xz) _require_command xz || return; xz -dc -- "$archive" > "$output" ;;
+      esac
+      ;;
+    *)
+      printf "Format d’archive non pris en charge : %s\n" "$archive" >&2
+      return 2
+      ;;
+  esac
+}
+
+tmpcd() {
+  [[ "$1" == "-h" ]] && _usage "tmpcd" "crée un dossier temporaire et s'y déplace" "tmpcd" && return 0
+  local directory
+  directory=$(mktemp -d "${TMPDIR:-/tmp}/shell-XXXXXX") || return
+  cd -- "$directory" || return
+  printf '→ %s\n' "$directory"
 }
 
 # ─────────────────────────────────────────────
@@ -267,9 +495,172 @@ gstats() {
   git shortlog -sn --all
 }
 
+# Oh My Bash fournit déjà `gwt` comme alias vers `git worktree`.
+# Notre fonction interactive le remplace volontairement.
+unalias gwt 2>/dev/null || true
+gwt() {
+  [[ "$1" == "-h" ]] && _usage "gwt" "gère les worktrees Git avec fzf" "gwt [add <branche> [chemin] | remove]" && return 0
+  _require_command git fzf || return
+  git rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "Pas dans un dépôt Git." >&2
+    return 1
+  }
+
+  local action="${1:-use}" branch path repo root
+  case "$action" in
+    use)
+      path=$(git worktree list --porcelain | sed -n 's/^worktree //p' |
+        fzf --prompt="worktree > " --preview 'git -C {} status --short --branch')
+      [[ -n "$path" ]] || return 0
+      cd -- "$path" || return
+      ;;
+    add)
+      _require_args 2 "$@" || return
+      branch="$2"
+      repo=$(basename "$(git rev-parse --show-toplevel)") || return
+      root=$(dirname "$(git rev-parse --show-toplevel)") || return
+      path="${3:-$root/${repo}-${branch//\//-}}"
+      if git show-ref --verify --quiet "refs/heads/$branch"; then
+        git worktree add "$path" "$branch"
+      elif git show-ref --verify --quiet "refs/remotes/$branch"; then
+        git worktree add --track -b "${branch#*/}" "$path" "$branch"
+      else
+        git worktree add -b "$branch" "$path"
+      fi
+      ;;
+    remove)
+      path=$(git worktree list --porcelain | sed -n 's/^worktree //p' |
+        command grep -vxF "$(git rev-parse --show-toplevel)" |
+        fzf --prompt="worktree à supprimer > " --preview 'git -C {} status --short --branch')
+      [[ -n "$path" ]] && git worktree remove "$path"
+      ;;
+    *)
+      printf 'Action inconnue : %s (use, add ou remove)\n' "$action" >&2
+      return 2
+      ;;
+  esac
+}
+
+gurl() {
+  [[ "$1" == "-h" ]] && _usage "gurl" "affiche ou ouvre l'URL du dépôt Git" "gurl [-o]" && return 0
+  _require_command git sed || return
+  local remote url
+  remote=$(git remote get-url origin 2>/dev/null) || {
+    echo "Remote origin introuvable." >&2
+    return 1
+  }
+  url=$(printf '%s\n' "$remote" | sed -E \
+    -e 's#^git@([^:]+):#https://\1/#' \
+    -e 's#^ssh://git@([^/]+)/#https://\1/#' \
+    -e 's#^(https?://)[^/@]+@#\1#' \
+    -e 's#\.git$##')
+  [[ "$url" == http://* || "$url" == https://* ]] || {
+    printf 'URL distante non prise en charge : %s\n' "$remote" >&2
+    return 1
+  }
+
+  if [[ "$1" == "-o" ]]; then
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then
+      open "$url" >/dev/null 2>&1 &
+    else
+      echo "Impossible d'ouvrir un navigateur." >&2
+      return 127
+    fi
+  else
+    printf '%s\n' "$url"
+  fi
+}
+
 # ─────────────────────────────────────────────
 # DIVERS
 # ─────────────────────────────────────────────
+
+retry() {
+  [[ "$1" == "-h" ]] && _usage "retry" "relance une commande après un échec" "retry <tentatives> <délai> <commande...>" && return 0
+  _require_args 3 "$@" || return
+  local attempts="$1" delay="$2" current=1 status
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] || {
+    echo "Le nombre de tentatives doit être un entier positif." >&2
+    return 2
+  }
+  [[ "$delay" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+    echo "Le délai doit être un nombre positif de secondes." >&2
+    return 2
+  }
+  shift 2
+
+  while true; do
+    "$@" && return 0
+    status=$?
+    (( current >= attempts )) && return "$status"
+    printf 'Échec (%s/%s), nouvel essai dans %ss…\n' "$current" "$attempts" "$delay" >&2
+    sleep "$delay"
+    ((current++))
+  done
+}
+
+json() {
+  [[ "$1" == "-h" ]] && _usage "json" "formate et colore du JSON avec jq" "json [fichier|texte] (ou stdin)" && return 0
+  _require_command jq || return
+  if (( $# == 0 )); then
+    jq .
+  elif (( $# == 1 )) && [[ -f "$1" ]]; then
+    jq . -- "$1"
+  else
+    printf '%s\n' "$*" | jq .
+  fi
+}
+
+# L'alias `path` d'Oh My Bash fournit une version plus rudimentaire.
+unalias path 2>/dev/null || true
+path() {
+  [[ "$1" == "-h" ]] && _usage "path" "affiche PATH une entrée par ligne" "path" && return 0
+  printf '%s\n' "${PATH//:/$'\n'}"
+}
+
+venv() {
+  [[ "$1" == "-h" ]] && _usage "venv" "crée puis active un environnement Python" "venv [dossier]" && return 0
+  _require_command python3 || return
+  local directory="${1:-.venv}"
+  [[ -d "$directory/bin" ]] || python3 -m venv "$directory" || return
+  [[ -r "$directory/bin/activate" ]] || {
+    printf 'Environnement invalide : %s\n' "$directory" >&2
+    return 1
+  }
+  # shellcheck disable=SC1090
+  source "$directory/bin/activate"
+  printf '→ environnement activé : %s\n' "$directory"
+}
+
+serve() {
+  [[ "$1" == "-h" ]] && _usage "serve" "sert un dossier en HTTP" "serve [port] [dossier]" && return 0
+  _require_command python3 || return
+  local port="${1:-8000}" directory="${2:-.}"
+  _valid_port "$port" || {
+    printf 'Port invalide : %s\n' "$port" >&2
+    return 2
+  }
+  [[ -d "$directory" ]] || {
+    printf 'Dossier introuvable : %s\n' "$directory" >&2
+    return 1
+  }
+  printf '→ http://127.0.0.1:%s (%s)\n' "$port" "$directory"
+  python3 -m http.server "$port" --bind 127.0.0.1 --directory "$directory"
+}
+
+epoch() {
+  [[ "$1" == "-h" ]] && _usage "epoch" "convertit une date ou un timestamp Unix" "epoch [timestamp|date]" && return 0
+  _require_command date || return
+  if (( $# == 0 )); then
+    date +%s
+  elif [[ "$1" =~ ^[0-9]+$ ]] && (( $# == 1 )); then
+    date -d "@$1" '+%Y-%m-%d %H:%M:%S %Z'
+  else
+    date -d "$*" +%s
+  fi
+}
 
 meteo() {
   [[ "$1" == "-h" ]] && _usage "meteo" "affiche la météo d'une ville" "meteo [ville]" && return 0
