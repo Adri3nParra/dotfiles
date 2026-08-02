@@ -1,20 +1,35 @@
-# Enable the subsequent settings only in interactive sessions
-case $- in
-  *i*) ;;
-    *) return;;
-esac
+# ─────────────────────────────────────────────
+# INTERACTIVE SHELL ONLY
+# ─────────────────────────────────────────────
+[[ $- == *i* ]] || return
+
 
 # ─────────────────────────────────────────────
-# OH-MY-BASH
+# ENVIRONMENT
 # ─────────────────────────────────────────────
-export OSH='/home/adrien/.oh-my-bash'
-#eval "$(starship init bash)"
+export EDITOR="vim"
+export VISUAL="$EDITOR"
+
+export KUBECONFIG="$HOME/.kube/config"
+export GODEBUG="tlsmlkem=0"
+
+export GREP_COLORS='ms=01;31:mc=01;31:sl=:cx=:fn=35:ln=32:bn=32:se=36'
+
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+export PATH="$HOME/.terragrunt/bin:$PATH"
+export PATH="/usr/local/go/bin:$PATH"
+
+
+# ─────────────────────────────────────────────
+# OH MY BASH
+# ─────────────────────────────────────────────
+export OSH="$HOME/.oh-my-bash"
+
 OSH_THEME="powerline-icon"
 
 DISABLE_AUTO_TITLE="false"
 ENABLE_CORRECTION="true"
 COMPLETION_WAITING_DOTS="true"
-OMB_USE_SUDO=true
 
 completions=(
   git
@@ -31,213 +46,401 @@ plugins=(
   bashmarks
 )
 
-# Powerline configuration
-if [ -f /usr/share/powerline/bindings/bash/powerline.sh ]; then
-  source /usr/share/powerline/bindings/bash/powerline.sh
-fi
 
-source "$OSH"/oh-my-bash.sh
+# ─────────────────────────────────────────────
+# KUBERNETES PROMPT
+# ─────────────────────────────────────────────
+# Toute la configuration du thème doit être définie
+# avant de charger oh-my-bash.sh.
 
-source "$HOME/.oh-my-bash/custom/kube-ps1/kube-ps1.sh"
-eval "_kube_ps1_render() $(declare -f kube_ps1 | tail -n +2)"
-unset -f kube_ps1
+KUBE_PS1_SCRIPT="$OSH/custom/kube-ps1/kube-ps1.sh"
 
-KUBE_PS1_SYMBOL_COLOR=""
-KUBE_PS1_CTX_COLOR=""
-KUBE_PS1_NS_COLOR=""
-KUBE_PS1_PREFIX_COLOR=""
-KUBE_PS1_SUFFIX_COLOR=""
-KUBE_PS1_BG_COLOR=""
-KUBE_PS1_SEPARATOR=" "
-KUBE_PS1_NS_ENABLE=true
-KUBE_PS1_SYMBOL_CUSTOM="img"
-KUBE_THEME_PROMPT_COLOR=237  # gris foncé, change selon ton goût
+if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
+  source "$KUBE_PS1_SCRIPT"
 
-_kube_short_cluster() {
-    echo "$1" | cut -d'@' -f2
-}
-KUBE_PS1_CLUSTER_FUNCTION=_kube_short_cluster
+  # Conserve une copie interne de kube_ps1 pour le thème Powerline.
+  if declare -F kube_ps1 >/dev/null 2>&1; then
+    eval "_kube_ps1_render() $(declare -f kube_ps1 | tail -n +2)"
+    unset -f kube_ps1
+  fi
 
-__powerline_kube_prompt() {
+  KUBE_PS1_SYMBOL_COLOR=""
+  KUBE_PS1_CTX_COLOR=""
+  KUBE_PS1_NS_COLOR=""
+  KUBE_PS1_PREFIX_COLOR=""
+  KUBE_PS1_SUFFIX_COLOR=""
+  KUBE_PS1_BG_COLOR=""
+
+  KUBE_PS1_SEPARATOR=" "
+  KUBE_PS1_NS_ENABLE=true
+  KUBE_PS1_SYMBOL_CUSTOM="img"
+
+  KUBE_THEME_PROMPT_COLOR=237
+
+  _kube_short_cluster() {
+    printf '%s\n' "${1#*@}"
+  }
+
+  KUBE_PS1_CLUSTER_FUNCTION=_kube_short_cluster
+
+  __powerline_kube_prompt() {
     local kube
-    kube="$(_kube_ps1_render | sed 's/\x1b\[[0-9;]*m//g')"
-    [[ -z "$kube" ]] && return
+
+    declare -F _kube_ps1_render >/dev/null 2>&1 || return
+
+    kube="$(
+      _kube_ps1_render |
+        sed $'s/\033\\[[0-9;]*m//g'
+    )"
+
+    [[ -n "$kube" ]] || return
+
     _omb_util_print "${kube}|${KUBE_THEME_PROMPT_COLOR}"
-}
+  }
+fi
 
 POWERLINE_PROMPT="user_info scm python_venv ruby cwd kube"
 
-# Override main theme
 POWERLINE_PROMPT_USER_INFO_MODE="sudo"
+
 OMB_THEME_POWERLINE_ICON_USER="🧬"
 OMB_THEME_POWERLINE_ICON_CLOCK=""
-# ─────────────────────────────────────────────
-# ENV
-# ─────────────────────────────────────────────
-if [[ -n $SSH_CONNECTION ]]; then
-  export EDITOR='vim'
-else
-  export EDITOR='vim'
+
+
+# Powerline doit être chargé avant Oh My Bash.
+if [[ -r /usr/share/powerline/bindings/bash/powerline.sh ]]; then
+  source /usr/share/powerline/bindings/bash/powerline.sh
 fi
 
-export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
-export PATH="/home/adrien/.terragrunt/bin:$PATH"
-export PATH="$PATH:/usr/local/go/bin"
-export KUBECONFIG="${HOME}/.kube/config"
-export GREP_COLORS='ms=01;31:mc=01;31:sl=:cx=:fn=35:ln=32:bn=32:se=36'
-[[ -f ~/.bash_func ]] && source ~/.bash_func
+if [[ -r "$OSH/oh-my-bash.sh" ]]; then
+  source "$OSH/oh-my-bash.sh"
+else
+  printf 'Oh My Bash introuvable : %s\n' "$OSH/oh-my-bash.sh" >&2
+fi
 
+
+# ─────────────────────────────────────────────
+# SHELL OPTIONS
+# ─────────────────────────────────────────────
+shopt -s autocd
+shopt -s cdspell
+shopt -s histappend
+shopt -s checkwinsize
+
+# Recherche d'historique selon ce qui est déjà saisi.
 bind '"\e[A": history-search-backward'
 bind '"\e[B": history-search-forward'
 
-# Homebrew
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-# Zoxide
-eval "$(zoxide init bash)"
-# Cargo
-[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
-
-# Auto-cd sans taper cd
-shopt -s autocd
-# Correction typos dans les chemins
-shopt -s cdspell
-# ─────────────────────────────────────────────
-# COMPLETIONS
-# ─────────────────────────────────────────────
-# Cache les completions lentes (une fois par jour)
-mkdir -p ~/.bash_cache
-_today=$(date +%F)
-
-_regen_completion() {
-  local name="$1" cmd="$2"
-  local cache="$HOME/.bash_cache/_${name}"
-  if [[ ! -f "$cache" || $(date -r "$cache" +%F 2>/dev/null) != "$_today" ]]; then
-    eval "$cmd" >| "$cache" 2>/dev/null
-  fi
-  source "$cache"
-}
-
-_regen_completion "kubectl"  "kubectl completion bash"
-_regen_completion "helm"     "helm completion bash"
-_regen_completion "argocd"   "argocd completion bash"
-_regen_completion "stern"    "stern --completion bash"
-_regen_completion "tofu"     "tofu completion bash"
-_regen_completion "ansible"          "register-python-argcomplete ansible"
-_regen_completion "ansible-playbook" "register-python-argcomplete ansible-playbook"
-_regen_completion "ansible-galaxy"   "register-python-argcomplete ansible-galaxy"
-_regen_completion "molecule"         "_MOLECULE_COMPLETE=bash_source molecule"
-_regen_completion "glab"         "glab completion"
-_regen_completion "ovhcloud"	"ovhcloud completion bash"
-_regen_completion "minikube"	"minikube completion bash"
-_regen_completion "kubara"	"kubara completion bash"
-_regen_completion "chezmoi"	"chezmoi completion bash"
-
-command -v kube-bench &>/dev/null && source <(kube-bench completion bash)
-command -v task       &>/dev/null && eval "$(task --completion bash)"
-command -v scw        &>/dev/null && eval "$(scw autocomplete script shell=bash)"
-command -v cosign     &>/dev/null && source <(cosign completion bash)
-command -v nerdctl    &>/dev/null && source ~/.local/share/bash-completion/completions/nerdctl 2>/dev/null
-source <(kubectl completion bash)
-
-complete -C /usr/bin/tofu tofu
-complete -C /home/adrien/.terragrunt/bin/terragrunt terragrunt
-complete -C /usr/local/bin/aws_completer aws
-
-# zsh like completion
+# Complétion avec menu sur Tab.
 bind 'set show-all-if-ambiguous off'
 bind 'TAB:menu-complete'
-# ─────────────────────────────────────────────
-# FZF
-# ─────────────────────────────────────────────
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
-export FZF_DEFAULT_OPTS="
-  --height 50%
-  --layout=reverse
-  --color='fg:#d0d0d0,bg:#121212,hl:#5f87af'
-  --color='fg+:#d0d0d0,bg+:#262626,hl+:#5fd7ff'
-  --color='info:#afaf87,prompt:#d7005f,pointer:#af5fff'
-  --color='marker:#87ff00,spinner:#af5fff,header:#87afaf'
-"
 
 # ─────────────────────────────────────────────
 # HISTORY
 # ─────────────────────────────────────────────
 HISTSIZE=10000
 HISTFILESIZE=10000
-HISTCONTROL=ignoreboth:erasedups
-HISTTIMEFORMAT="%d/%m %H:%M  "
-shopt -s histappend
-PROMPT_COMMAND="history -a;$PROMPT_COMMAND"
+HISTCONTROL="ignoreboth:erasedups"
 
-# ─────────────────────────────────────────────
-# ALIASES — Système
-# ─────────────────────────────────────────────
-export GODEBUG=tlsmlkem=0
-alias ls="eza --icons"
-alias ll="ls -lahF --color=auto"
-alias ..="cd .."
-alias ...="cd ../.."
-alias grep="grep --color=auto"
-alias ports="ss -tulpn"
-alias myip="curl -s ifconfig.me"
-alias top="btop"
-alias cat="batcat --style=plain"
-alias salut="topgrade --disable containers -c --yes"
-alias setK3S="export KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
-alias unsetK3S="unset KUBECONFIG"
-alias please="sudo !!"
-alias gcl="gitlab-ci-local --home ~/.gitlab-ci-local"
-# Kube
-alias k=kubectl
-complete -o default -F __start_kubectl k
-alias kubeseal="kubeseal --cert ~/.kube/sealed-secrets-cert.pem"
-# Ansible Env
-alias ansible-env='source ~/.venv/ansible/bin/activate'
-# Openstack
-alias os='openstack'
-complete -o default -F _openstack os
+# Ne remets pas HISTTIMEFORMAT globalement :
+# certaines intégrations FZF anciennes le gèrent mal.
+unset HISTTIMEFORMAT
 
-# ─────────────────────────────────────────────
-# LOCAL OVERRIDES (tokens, paths machine-specific)
-# ─────────────────────────────────────────────
-[[ -f ~/.bashrc.local ]] && source ~/.bashrc.local || true
-source ~/.config/openstack/openrc.sh
-###-begin-gitlab-ci-local-completions-###
-#
-# yargs command completion script
-#
-# Installation: gitlab-ci-local completion >> ~/.bashrc
-#    or gitlab-ci-local completion >> ~/.bash_profile on OSX.
-#
-_gitlab-ci-local_yargs_completions()
-{
-    local cur_word args type_list
+# Enregistre immédiatement l'historique sans écraser
+# un éventuel PROMPT_COMMAND existant.
+case ";${PROMPT_COMMAND:-};" in
+  *";history -a;"*)
+    ;;
+  *)
+    PROMPT_COMMAND="history -a${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+    ;;
+esac
 
-    cur_word="${COMP_WORDS[COMP_CWORD]}"
-    args=("${COMP_WORDS[@]}")
-
-    # ask yargs to generate completions.
-    # see https://stackoverflow.com/a/40944195/7080036 for the spaces-handling awk
-    mapfile -t type_list < <(gitlab-ci-local --get-yargs-completions "${args[@]}")
-    mapfile -t COMPREPLY < <(compgen -W "$( printf '%q ' "${type_list[@]}" )" -- "${cur_word}" |
-        awk '/ / { print "\""$0"\"" } /^[^ ]+$/ { print $0 }')
-
-    # if no match was found, fall back to filename completion
-    if [ ${#COMPREPLY[@]} -eq 0 ]; then
-      COMPREPLY=()
-    fi
-
-    return 0
+history-time() {
+  HISTTIMEFORMAT="%d/%m %H:%M  " builtin history "$@"
 }
-complete -o bashdefault -o default -F _gitlab-ci-local_yargs_completions gitlab-ci-local
-###-end-gitlab-ci-local-completions-###
 
 
-# Terminal welcome
-clear
-figlet -f slant  "Linux"
-figlet -f slant "For the win"
-echo "🐧 Welcome back, kernel enjoyer."
-echo "💀 No GUI panic, only shell power."
-echo
+# ─────────────────────────────────────────────
+# EXTERNAL TOOLS
+# ─────────────────────────────────────────────
+
+# Homebrew
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
+# Zoxide
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init bash)"
+fi
+
+# Cargo
+if [[ -r "$HOME/.cargo/env" ]]; then
+  source "$HOME/.cargo/env"
+fi
+
+# Fonctions personnelles
+if [[ -r "$HOME/.bash_func" ]]; then
+  source "$HOME/.bash_func"
+fi
+
+
+# ─────────────────────────────────────────────
+# COMPLETIONS
+# ─────────────────────────────────────────────
+BASH_COMPLETION_CACHE="$HOME/.cache/bash-completions"
+mkdir -p "$BASH_COMPLETION_CACHE"
+
+_completion_cache() {
+  local name="$1"
+  shift
+
+  local cache="$BASH_COMPLETION_CACHE/$name"
+  local today
+
+  today="$(date +%F)"
+
+  if [[ ! -s "$cache" ]] ||
+     [[ "$(date -r "$cache" +%F 2>/dev/null)" != "$today" ]]; then
+    "$@" >| "$cache" 2>/dev/null || {
+      rm -f "$cache"
+      return 0
+    }
+  fi
+
+  [[ -r "$cache" ]] && source "$cache"
+}
+
+command -v kubectl >/dev/null 2>&1 &&
+  _completion_cache kubectl kubectl completion bash
+
+command -v helm >/dev/null 2>&1 &&
+  _completion_cache helm helm completion bash
+
+command -v argocd >/dev/null 2>&1 &&
+  _completion_cache argocd argocd completion bash
+
+command -v stern >/dev/null 2>&1 &&
+  _completion_cache stern stern --completion bash
+
+command -v glab >/dev/null 2>&1 &&
+  _completion_cache glab glab completion
+
+command -v ovhcloud >/dev/null 2>&1 &&
+  _completion_cache ovhcloud ovhcloud completion bash
+
+command -v minikube >/dev/null 2>&1 &&
+  _completion_cache minikube minikube completion bash
+
+command -v kubara >/dev/null 2>&1 &&
+  _completion_cache kubara kubara completion bash
+
+command -v chezmoi >/dev/null 2>&1 &&
+  _completion_cache chezmoi chezmoi completion bash
+
+command -v kube-bench >/dev/null 2>&1 &&
+  _completion_cache kube-bench kube-bench completion bash
+
+command -v task >/dev/null 2>&1 &&
+  _completion_cache task task --completion bash
+
+command -v scw >/dev/null 2>&1 &&
+  _completion_cache scw scw autocomplete script shell=bash
+
+command -v cosign >/dev/null 2>&1 &&
+  _completion_cache cosign cosign completion bash
+
+
+# Python argcomplete
+if command -v register-python-argcomplete >/dev/null 2>&1; then
+  command -v ansible >/dev/null 2>&1 &&
+    _completion_cache ansible \
+      register-python-argcomplete ansible
+
+  command -v ansible-playbook >/dev/null 2>&1 &&
+    _completion_cache ansible-playbook \
+      register-python-argcomplete ansible-playbook
+
+  command -v ansible-galaxy >/dev/null 2>&1 &&
+    _completion_cache ansible-galaxy \
+      register-python-argcomplete ansible-galaxy
+fi
+
+
+# Molecule
+if command -v molecule >/dev/null 2>&1; then
+  MOLECULE_CACHE="$BASH_COMPLETION_CACHE/molecule"
+
+  if [[ ! -s "$MOLECULE_CACHE" ]] ||
+     [[ "$(date -r "$MOLECULE_CACHE" +%F 2>/dev/null)" != "$(date +%F)" ]]; then
+    _MOLECULE_COMPLETE=bash_source molecule \
+      >| "$MOLECULE_CACHE" 2>/dev/null || {
+        rm -f "$MOLECULE_CACHE"
+      }
+  fi
+
+  [[ -r "$MOLECULE_CACHE" ]] && source "$MOLECULE_CACHE"
+
+  unset MOLECULE_CACHE
+fi
+
+
+# Nerdctl fournit parfois directement un fichier.
+if [[ -r "$HOME/.local/share/bash-completion/completions/nerdctl" ]]; then
+  source "$HOME/.local/share/bash-completion/completions/nerdctl"
+fi
+
+
+# Complétions basées sur un exécutable dédié.
+if [[ -x "$HOME/.terragrunt/bin/terragrunt" ]]; then
+  complete \
+    -C "$HOME/.terragrunt/bin/terragrunt" \
+    terragrunt
+fi
+
+if [[ -x /usr/local/bin/aws_completer ]]; then
+  complete -C /usr/local/bin/aws_completer aws
+elif command -v aws_completer >/dev/null 2>&1; then
+  complete -C "$(command -v aws_completer)" aws
+fi
+
+
+# ─────────────────────────────────────────────
+# ALIASES AND FUNCTIONS
+# ─────────────────────────────────────────────
+
+# Eza
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --icons'
+  alias ll='eza -lahF --icons --color=auto'
+else
+  alias ls='ls --color=auto'
+  alias ll='ls -lahF --color=auto'
+fi
+
+alias ..='cd ..'
+alias ...='cd ../..'
+
+alias grep='grep --color=auto'
+alias ports='ss -tulpn'
+alias myip='curl -fsS --max-time 5 ifconfig.me'
+
+if command -v btop >/dev/null 2>&1; then
+  alias top='btop'
+fi
+
+if command -v batcat >/dev/null 2>&1; then
+  alias cat='batcat --style=plain'
+elif command -v bat >/dev/null 2>&1; then
+  alias cat='bat --style=plain'
+fi
+
+alias salut='topgrade --disable containers -c --yes'
+
+setK3S() {
+  export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+}
+
+unsetK3S() {
+  export KUBECONFIG="$HOME/.kube/config"
+}
+
+please_last() {
+  local previous_command
+
+  previous_command="$(fc -ln -1)"
+  [[ -n "$previous_command" ]] || return 1
+
+  eval "sudo $previous_command"
+}
+
+alias gcl='gitlab-ci-local --home ~/.gitlab-ci-local'
+
+
+# Kubernetes
+alias k='kubectl'
+
+if declare -F __start_kubectl >/dev/null 2>&1; then
+  complete -o default -F __start_kubectl k
+fi
+
+
+# Kubeseal
+alias kubeseal='kubeseal --cert ~/.kube/sealed-secrets-cert.pem'
+
+
+# Ansible
+alias ansible-env='source ~/.venv/ansible/bin/activate'
+
+
+# OpenStack
+alias os='openstack'
+
+if declare -F _openstack >/dev/null 2>&1; then
+  complete -o default -F _openstack os
+fi
+
+
+# ─────────────────────────────────────────────
+# FZF
+# ─────────────────────────────────────────────
+# Une seule source FZF. Ne charge pas aussi manuellement
+# ~/.fzf/shell/key-bindings.bash ailleurs.
+if [[ -r "$HOME/.fzf.bash" ]]; then
+  source "$HOME/.fzf.bash"
+fi
+
+export FZF_DEFAULT_OPTS="
+  --height 50%
+  --layout=reverse
+  --border
+  --color='fg:#d0d0d0,bg:#121212,hl:#5f87af'
+  --color='fg+:#d0d0d0,bg+:#262626,hl+:#5fd7ff'
+  --color='info:#afaf87,prompt:#d7005f,pointer:#af5fff'
+  --color='marker:#87ff00,spinner:#af5fff,header:#87afaf'
+"
+
+
+# ─────────────────────────────────────────────
+# EXTRA COMPLETION FILES
+# ─────────────────────────────────────────────
+if [[ -d "$HOME/.bash_completion.d" ]]; then
+  for completion_file in "$HOME"/.bash_completion.d/*.bash; do
+    [[ -r "$completion_file" ]] && source "$completion_file"
+  done
+
+  unset completion_file
+fi
+
+
+# ─────────────────────────────────────────────
+# LOCAL MACHINE CONFIGURATION
+# ─────────────────────────────────────────────
+if [[ -r "$HOME/.bashrc.local" ]]; then
+  source "$HOME/.bashrc.local"
+fi
+
+if [[ -r "$HOME/.config/openstack/openrc.sh" ]]; then
+  source "$HOME/.config/openstack/openrc.sh"
+fi
+
+
+# ─────────────────────────────────────────────
+# TERMINAL WELCOME
+# ─────────────────────────────────────────────
+# Seulement dans le premier shell local, pas en SSH ni dans les sous-shells.
+if [[ -z "${SSH_CONNECTION:-}" ]] &&
+   [[ ${SHLVL:-1} -eq 1 ]] &&
+   [[ -t 1 ]] &&
+   command -v figlet >/dev/null 2>&1; then
+  clear
+
+  figlet -f slant "Linux"
+  figlet -f slant "For the win"
+
+  printf '%s\n' \
+    '🐧 Welcome back, kernel enjoyer.' \
+    '💀 No GUI panic, only shell power.'
+fi
