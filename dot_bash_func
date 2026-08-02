@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # ─────────────────────────────────────────────
 # FONCTIONS
 # ─────────────────────────────────────────────
@@ -6,19 +7,29 @@ _usage() {
   echo -e "$(tput bold)$fn$(tput sgr0) — $desc\nUsage: $usage"
 }
 
+_require_args() {
+  local expected="$1"
+  shift
+
+  (( $# >= expected )) && return 0
+  printf "Arguments manquants. Utilise -h pour afficher l’aide.\n" >&2
+  return 2
+}
+
 reminder() {
   local filter="${1:-}"
   local cat="${2:-}"
 
   local -A sections
-  sections[kubernetes]="kexec klogs kforward"
+  sections[kubernetes]="kexec klogs kforward kctx kns"
   sections[réseau]="tcpcheck portscan httpcheck listening"
   sections[git]="gbf glogf gstats"
-  sections[fichiers]="ff fcd"
-  sections[divers]="genpass b64enc b64dec sysinfo fkill meteo reload"
+  sections[fichiers]="ff fcd mkcd croot"
+  sections[processus]="fkill topcpu topmem"
+  sections[divers]="genpass b64enc b64dec sysinfo meteo reload"
 
   echo ""
-  for section in kubernetes git réseau fichiers divers; do
+  for section in kubernetes git réseau fichiers processus divers; do
     [[ -n "$cat" && "$cat" != "$section" ]] && continue
     echo -e "  \e[2m── $section\e[0m"
     for fn in ${sections[$section]}; do
@@ -29,9 +40,11 @@ reminder() {
     done
     echo ""
   done
-  echo -e "  \e[2mmyhelp [filtre] [catégorie]\e[0m"
+  echo -e "  \e[2mreminder [filtre] [catégorie] (alias : myhelp)\e[0m"
   echo ""
 }
+
+myhelp() { reminder "$@"; }
 
 # ─────────────────────────────────────────────
 # KUBERNETES
@@ -40,31 +53,63 @@ reminder() {
 kexec() {
   [[ "$1" == "-h" ]] && _usage "kexec" "exec shell sur un pod via fzf" "kexec [namespace]" && return 0
   local ns="${1:--A}"
-  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
-  local pod
-  pod=$(kubectl get pods $flag --no-headers \
+  local -a scope
+  [[ "$ns" == "-A" ]] && scope=(-A) || scope=(-n "$ns")
+  local pod container containers
+  pod=$(kubectl get pods "${scope[@]}" --no-headers \
     -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
     | fzf --prompt="pod > " | awk '{print $1"/"$2}')
-  [[ -n "$pod" ]] && kubectl exec -it -n "${pod%/*}" "${pod##*/}" -- sh
+  [[ -n "$pod" ]] || return 0
+
+  containers=$(kubectl get pod -n "${pod%/*}" "${pod##*/}" \
+    -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}') || return
+  if [[ "$containers" == *$'\n'* ]]; then
+    container=$(printf '%s\n' "$containers" | sed '/^$/d' | fzf --prompt="container > ")
+  else
+    container="$containers"
+  fi
+  [[ -n "$container" ]] || return 0
+
+  kubectl exec -it -n "${pod%/*}" "${pod##*/}" -c "$container" -- \
+    sh -c 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'
 }
 
 klogs() {
-  [[ "$1" == "-h" ]] && _usage "klogs" "tail logs d'un pod via fzf" "klogs [namespace]" && return 0
+  [[ "$1" == "-h" ]] && _usage "klogs" "tail logs d'un pod via fzf" "klogs [-p] [namespace]" && return 0
+  local previous=false
+  if [[ "$1" == "-p" ]]; then
+    previous=true
+    shift
+  fi
   local ns="${1:--A}"
-  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
-  local pod
-  pod=$(kubectl get pods $flag --no-headers \
+  local -a scope log_args=(-f)
+  [[ "$ns" == "-A" ]] && scope=(-A) || scope=(-n "$ns")
+  [[ "$previous" == true ]] && log_args+=(-p)
+  local pod container containers
+  pod=$(kubectl get pods "${scope[@]}" --no-headers \
     -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
     | fzf --prompt="pod > " | awk '{print $1"/"$2}')
-  [[ -n "$pod" ]] && kubectl logs -f -n "${pod%/*}" "${pod##*/}"
+  [[ -n "$pod" ]] || return 0
+
+  containers=$(kubectl get pod -n "${pod%/*}" "${pod##*/}" \
+    -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}') || return
+  if [[ "$containers" == *$'\n'* ]]; then
+    container=$(printf '%s\n' "$containers" | sed '/^$/d' | fzf --prompt="container > ")
+  else
+    container="$containers"
+  fi
+  [[ -n "$container" ]] || return 0
+
+  kubectl logs "${log_args[@]}" -n "${pod%/*}" "${pod##*/}" -c "$container"
 }
 
 kforward() {
-  [[ "$1" == "-h" ]] && _usage "kpf" "port-forward sur un svc via fzf" "kpf [namespace] [port]" && return 0
+  [[ "$1" == "-h" ]] && _usage "kforward" "port-forward sur un svc via fzf" "kforward [namespace] [port]" && return 0
   local ns="${1:--A}" port="${2:-8080}"
-  local flag; [[ "$ns" == "-A" ]] && flag="-A" || flag="-n $ns"
+  local -a scope
+  [[ "$ns" == "-A" ]] && scope=(-A) || scope=(-n "$ns")
   local svc
-  svc=$(kubectl get svc $flag --no-headers \
+  svc=$(kubectl get svc "${scope[@]}" --no-headers \
     -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name \
     | fzf --prompt="svc > " | awk '{print $1"/"$2}')
   [[ -n "$svc" ]] && kubectl port-forward -n "${svc%/*}" "svc/${svc##*/}" "$port"
@@ -76,27 +121,36 @@ kforward() {
 
 listening() {
   [[ "$1" == "-h" ]] && _usage "listening" "qui écoute sur un port ?" "listening <port>" && return 0
-  ss -tulpn | grep ":${1}"
+  _require_args 1 "$@" || return
+  ss -tulpn | grep -E ":${1}([[:space:]]|$)"
 }
 
 tcpcheck() {
   [[ "$1" == "-h" ]] && _usage "tcpcheck" "test connectivité TCP" "tcpcheck <host> <port>" && return 0
-  timeout 3 bash -c "cat < /dev/null > /dev/tcp/$1/$2" \
-    && echo "✓ $1:$2 open" || echo "✗ $1:$2 closed"
+  _require_args 2 "$@" || return
+  local host="$1" port="$2"
+  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || {
+    printf 'Port invalide : %s\n' "$port" >&2
+    return 2
+  }
+  timeout 3 bash -c 'cat < /dev/null > "/dev/tcp/$1/$2"' _ "$host" "$port" \
+    && echo "✓ $host:$port open" || echo "✗ $host:$port closed"
 }
 
 portscan() {
   [[ "$1" == "-h" ]] && _usage "portscan" "scan ports courants sans nmap" "portscan <host>" && return 0
+  _require_args 1 "$@" || return
   local host="$1"
   for port in 22 80 443 3306 5432 6379 8080 8443 9090 9200; do
-    timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null \
+    timeout 1 bash -c 'cat < /dev/null > "/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null \
       && echo "✓ $port open" || echo "✗ $port closed"
   done
 }
 
 httpcheck() {
   [[ "$1" == "-h" ]] && _usage "httpcheck" "vérifie les headers HTTP d'une URL" "httpcheck <url>" && return 0
-  curl -sI "$1" | head -20
+  _require_args 1 "$@" || return
+  curl -fsSIL --max-time 10 "$1" | head -20
 }
 
 # ─────────────────────────────────────────────
@@ -105,16 +159,51 @@ httpcheck() {
 
 ff() {
   [[ "$1" == "-h" ]] && _usage "ff" "trouver et ouvrir un fichier via fzf" "ff [dossier]" && return 0
-  local file
-  file=$(find "${1:-.}" -type f 2>/dev/null | fzf --prompt="file > ")
-  [[ -n "$file" ]] && ${EDITOR:-vim} "$file"
+  local root="${1:-.}" file preview
+  if command -v batcat >/dev/null 2>&1; then
+    preview='batcat --color=always --style=numbers --line-range=:300 -- {}'
+  elif command -v bat >/dev/null 2>&1; then
+    preview='bat --color=always --style=numbers --line-range=:300 -- {}'
+  else
+    preview='sed -n "1,300p" -- {}'
+  fi
+
+  if command -v fd >/dev/null 2>&1; then
+    file=$(fd --type f --hidden --exclude .git . "$root" 2>/dev/null |
+      fzf --prompt="file > " --preview "$preview")
+  else
+    file=$(find "$root" -type f -not -path '*/.git/*' 2>/dev/null |
+      fzf --prompt="file > " --preview "$preview")
+  fi
+  [[ -n "$file" ]] && "${EDITOR:-vim}" "$file"
 }
 
 fcd() {
   [[ "$1" == "-h" ]] && _usage "fcd" "cd dans un sous-dossier via fzf" "fcd [dossier]" && return 0
-  local dir
-  dir=$(find "${1:-.}" -type d 2>/dev/null | fzf --prompt="dir > ")
-  [[ -n "$dir" ]] && cd "$dir"
+  local root="${1:-.}" dir
+  if command -v fd >/dev/null 2>&1; then
+    dir=$(fd --type d --hidden --exclude .git . "$root" 2>/dev/null | fzf --prompt="dir > ")
+  else
+    dir=$(find "$root" -type d -not -path '*/.git/*' 2>/dev/null | fzf --prompt="dir > ")
+  fi
+  [[ -n "$dir" ]] && cd -- "$dir" || return
+}
+
+mkcd() {
+  [[ "$1" == "-h" ]] && _usage "mkcd" "crée un dossier puis s'y déplace" "mkcd <dossier>" && return 0
+  _require_args 1 "$@" || return
+  mkdir -p -- "$1" || return
+  cd -- "$1" || return
+}
+
+croot() {
+  [[ "$1" == "-h" ]] && _usage "croot" "se place à la racine du dépôt Git" "croot" && return 0
+  local root
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "Pas dans un dépôt Git." >&2
+    return 1
+  }
+  cd -- "$root" || return
 }
 
 # ─────────────────────────────────────────────
@@ -122,14 +211,22 @@ fcd() {
 # ─────────────────────────────────────────────
 
 fkill() {
-  [[ "$1" == "-h" ]] && _usage "fkill" "kill un process via fzf" "fkill" && return 0
-  local pid
+  [[ "$1" == "-h" ]] && _usage "fkill" "arrête un processus via fzf" "fkill [-9]" && return 0
+  local signal=TERM pid
+  [[ "$1" == "-9" ]] && signal=KILL
   pid=$(ps aux | fzf --prompt="process > " --header-lines=1 | awk '{print $2}')
-  [[ -n "$pid" ]] && kill -9 "$pid" && echo "→ killed $pid"
+  [[ -n "$pid" ]] && kill -s "$signal" -- "$pid" && echo "→ signal $signal envoyé à $pid"
 }
 
-topcpu() { ps aux --sort=-%cpu | head -11; }
-topmem() { ps aux --sort=-%mem | head -11; }
+topcpu() {
+  [[ "$1" == "-h" ]] && _usage "topcpu" "affiche les processus les plus gourmands en CPU" "topcpu" && return 0
+  ps aux --sort=-%cpu | head -11
+}
+
+topmem() {
+  [[ "$1" == "-h" ]] && _usage "topmem" "affiche les processus les plus gourmands en mémoire" "topmem" && return 0
+  ps aux --sort=-%mem | head -11
+}
 
 # ─────────────────────────────────────────────
 # GIT
@@ -138,16 +235,31 @@ topmem() { ps aux --sort=-%mem | head -11; }
 gbf() {
   [[ "$1" == "-h" ]] && _usage "gbf" "switch de branche via fzf" "gbf" && return 0
   local branch
-  branch=$(git branch -a | fzf --prompt="branch > " | sed 's/remotes\/origin\///' | tr -d ' *')
-  [[ -n "$branch" ]] && git checkout "$branch"
+  branch=$(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes |
+    grep -v '/HEAD$' | sort -u | fzf --prompt="branch > ")
+  [[ -n "$branch" ]] || return 0
+
+  local local_branch="$branch"
+  if git show-ref --verify --quiet "refs/remotes/$branch"; then
+    local_branch="${branch#*/}"
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$local_branch"; then
+    git switch "$local_branch"
+  elif git show-ref --verify --quiet "refs/heads/$branch"; then
+    git switch "$branch"
+  else
+    git switch --track "$branch"
+  fi
 }
 
 glogf() {
   [[ "$1" == "-h" ]] && _usage "glogf" "git log interactif avec preview diff" "glogf" && return 0
-  git log --oneline --all \
-    | fzf --preview 'git show --stat {1}' \
-    | awk '{print $1}' \
-    | xargs git show
+  local commit
+  commit=$(git log --oneline --all |
+    fzf --preview 'git show --color=always --stat --patch {1}' |
+    awk '{print $1}')
+  [[ -n "$commit" ]] && git show "$commit"
 }
 
 gstats() {
@@ -160,18 +272,34 @@ gstats() {
 # ─────────────────────────────────────────────
 
 meteo() {
+  [[ "$1" == "-h" ]] && _usage "meteo" "affiche la météo d'une ville" "meteo [ville]" && return 0
   curl -s "wttr.in/${1:-Nantes}?format=3"
 }
 
-b64enc() { echo -n "$1" | base64; }
-b64dec() { echo -n "$1" | base64 -d; }
+b64enc() {
+  [[ "$1" == "-h" ]] && _usage "b64enc" "encode en Base64" "b64enc [texte] (ou stdin)" && return 0
+  if (( $# )); then printf '%s' "$*" | base64; else base64; fi
+}
+
+b64dec() {
+  [[ "$1" == "-h" ]] && _usage "b64dec" "décode du Base64" "b64dec [texte] (ou stdin)" && return 0
+  if (( $# )); then printf '%s' "$*" | base64 -d; else base64 -d; fi
+}
 
 genpass() {
   [[ "$1" == "-h" ]] && _usage "genpass" "génère un mot de passe aléatoire" "genpass [longueur]" && return 0
-  tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom | head -c "${1:-32}"; echo
+  local length="${1:-32}"
+  [[ "$length" =~ ^[1-9][0-9]*$ ]] || {
+    echo "La longueur doit être un entier positif." >&2
+    return 2
+  }
+  LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom 2>/dev/null |
+    head -c "$length"
+  echo
 }
 
 sysinfo() {
+  [[ "$1" == "-h" ]] && _usage "sysinfo" "affiche un résumé du système" "sysinfo" && return 0
   echo "Hostname : $(hostname)"
   echo "OS       : $(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"')"
   echo "Kernel   : $(uname -r)"
@@ -182,4 +310,8 @@ sysinfo() {
   echo "IP       : $(hostname -I | awk '{print $1}')"
 }
 
-reload() { source ~/.bashrc && echo "→ .bashrc rechargé"; }
+reload() {
+  [[ "$1" == "-h" ]] && _usage "reload" "recharge la configuration Bash" "reload" && return 0
+  # shellcheck disable=SC1090
+  source "$HOME/.bashrc" && echo "→ .bashrc rechargé"
+}

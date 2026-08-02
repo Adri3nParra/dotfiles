@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # ─────────────────────────────────────────────
 # INTERACTIVE SHELL ONLY
 # ─────────────────────────────────────────────
@@ -147,13 +148,13 @@ HISTCONTROL="ignoreboth:erasedups"
 # certaines intégrations FZF anciennes le gèrent mal.
 unset HISTTIMEFORMAT
 
-# Enregistre immédiatement l'historique sans écraser
+# Enregistre et relit immédiatement l'historique sans écraser
 # un éventuel PROMPT_COMMAND existant.
 case ";${PROMPT_COMMAND:-};" in
-  *";history -a;"*)
+  *";history -a; history -n;"*)
     ;;
   *)
-    PROMPT_COMMAND="history -a${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+    PROMPT_COMMAND="history -a; history -n${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
     ;;
 esac
 
@@ -184,6 +185,11 @@ fi
 # Fonctions personnelles
 if [[ -r "$HOME/.bash_func" ]]; then
   source "$HOME/.bash_func"
+fi
+
+# Profils cloud personnels
+if [[ -r "$HOME/.config/cloud-profiles/cloud.sh" ]]; then
+  source "$HOME/.config/cloud-profiles/cloud.sh"
 fi
 
 

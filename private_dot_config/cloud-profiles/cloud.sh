@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # ─────────────────────────────────────────────
 # CLOUD PROFILE MANAGER
 # ─────────────────────────────────────────────
@@ -225,8 +226,8 @@ _cloud_completion() {
 
     case "$COMP_CWORD" in
         1)
-            COMPREPLY=(
-                $(compgen -W "$actions" -- "$current")
+            mapfile -t COMPREPLY < <(
+                compgen -W "$actions" -- "$current"
             )
             ;;
 
@@ -234,8 +235,8 @@ _cloud_completion() {
             case "$previous" in
                 use | edit)
                     profiles="$(_cloud_profile_names)"
-                    COMPREPLY=(
-                        $(compgen -W "$profiles" -- "$current")
+                    mapfile -t COMPREPLY < <(
+                        compgen -W "$profiles" -- "$current"
                     )
                     ;;
             esac
