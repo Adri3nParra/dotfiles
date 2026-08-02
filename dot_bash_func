@@ -33,34 +33,6 @@ reminder() {
   echo ""
 }
 
-cloudCnx() {
-  case "$1" in
-    fabrique)
-      export AWS_ACCESS_KEY_ID=""
-      export AWS_SECRET_ACCESS_KEY=""
-      export OVH_APPLICATION_KEY=""
-      export OVH_CONSUMER_KEY=""
-      export OVH_APPLICATION_SECRET=""
-      echo "☁️  OVH → Conserto FD"
-      ;;
-    fedea)
-      export AWS_ACCESS_KEY_ID=""
-      export AWS_SECRET_ACCESS_KEY=""
-      export OVH_APPLICATION_KEY=""
-      export OVH_CONSUMER_KEY=""
-      export OVH_APPLICATION_SECRET=""
-      echo "☁️  OVH → Fedea"
-      ;;
-    clear)
-      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY OVH_APPLICATION_KEY OVH_CONSUMER_KEY OVH_APPLICATION_SECRET
-      echo "🧹 env cloud cleared"
-      ;;
-    *)
-      echo "Usage: cloudCnx [fabrique|fedea|clear]"
-      ;;
-  esac
-}
-
 # ─────────────────────────────────────────────
 # KUBERNETES
 # ─────────────────────────────────────────────
