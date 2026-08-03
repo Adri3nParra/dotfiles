@@ -1,29 +1,28 @@
 # ───────────────────────────────────────────
-# Argo CD CLI + FZF
-# Commande : argocd_fzf
+# Argo CD CLI + FZF : application -> action
+# Usage : argocd_fzf [options de l'action]
 # ───────────────────────────────────────────
 
-_argocd_completions() {
-  argocd __completeNoDesc "$@" 2>/dev/null |
-    sed '/^:[0-9][0-9]*$/d' |
-    awk 'NF && $0 !~ /^-/ && !seen[$0]++'
-}
+_argocd_app_actions() {
+  local action
 
-_argocd_app_required() {
-  local operation="$1"
+  while IFS= read -r action; do
+    # `create` attend un nouveau nom, pas une application existante.
+    [[ "$action" == "create" ]] && continue
 
-  [[ "${operation}" != 'create' ]] &&
-    argocd app "${operation}" --help 2>/dev/null |
+    if command argocd app "$action" --help 2>/dev/null |
       sed -n '/^Usage:/,/^$/p' |
-      grep -q 'APPNAME'
+      grep -q 'APPNAME'; then
+      printf '%s\n' "$action"
+    fi
+  done < <(
+    command argocd __completeNoDesc app '' 2>/dev/null |
+      sed '/^:[0-9][0-9]*$/d'
+  )
 }
 
 argocd_fzf() {
-  local app
-  local apps
-  local group
-  local operation
-  local operations
+  local app action
 
   command -v argocd >/dev/null 2>&1 || {
     printf '\nArgo CD CLI introuvable.\n' >&2
@@ -35,62 +34,34 @@ argocd_fzf() {
     return 1
   }
 
-  group="$(
-    _argocd_completions '' |
-      grep -vE '^(completion|help)$' |
+  app="$(
+    command argocd app list --output name |
+      awk 'NF && !seen[$0]++' |
       fzf \
-        --prompt='Argo CD commande > ' \
+        --prompt='Application Argo CD > ' \
         --height='60%' \
         --layout=reverse \
         --border \
         --info=inline \
-        --preview='argocd {} --help 2>/dev/null | head -100' \
+        --preview='argocd app get {} 2>/dev/null | head -100' \
         --preview-window='right:60%:wrap'
   )" || return
 
-  operations="$(_argocd_completions "${group}" '' | grep -vE '^help$')"
+  [[ -n "$app" ]] || return
 
-  if [[ -z "${operations}" ]]; then
-    command argocd "${group}" "$@"
-    return $?
-  fi
-
-  operation="$(
-    printf '%s\n' "${operations}" |
+  action="$(
+    _argocd_app_actions |
       fzf \
-        --prompt="argocd ${group} > " \
+        --prompt="Action pour ${app} > " \
         --height='60%' \
         --layout=reverse \
         --border \
         --info=inline \
-        --preview="argocd ${group} {} --help 2>/dev/null | head -100" \
+        --preview='argocd app {} --help 2>/dev/null | head -100' \
         --preview-window='right:60%:wrap'
   )" || return
 
-  if [[ "${group}" == 'app' ]] && _argocd_app_required "${operation}"; then
-    apps="$(command argocd app list --output name)" || return
+  [[ -n "$action" ]] || return
 
-    if [[ -z "${apps}" ]]; then
-      printf 'Aucune application Argo CD trouvée.\n' >&2
-      return 1
-    fi
-
-    app="$(
-      printf '%s\n' "${apps}" |
-        awk 'NF && !seen[$0]++' |
-        fzf \
-          --prompt="argocd app ${operation} > " \
-          --height='60%' \
-          --layout=reverse \
-          --border \
-          --info=inline \
-          --preview='argocd app get {} 2>/dev/null | head -100' \
-          --preview-window='right:60%:wrap'
-    )" || return
-
-    command argocd "${group}" "${operation}" "${app}" "$@"
-    return $?
-  fi
-
-  command argocd "${group}" "${operation}" "$@"
+  command argocd app "$action" "$app" "$@"
 }
