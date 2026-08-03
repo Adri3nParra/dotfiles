@@ -192,6 +192,13 @@ if [[ -r "$HOME/.config/cloud-profiles/cloud.sh" ]]; then
   source "$HOME/.config/cloud-profiles/cloud.sh"
 fi
 
+#
+if [[ -d "$HOME/.bash_functions.d" ]]; then
+  for function_file in "$HOME"/.bash_functions.d/*.sh; do
+    [[ -r "$function_file" ]] && source "$function_file"
+  done
+  unset function_file
+fi
 
 # ─────────────────────────────────────────────
 # COMPLETIONS
