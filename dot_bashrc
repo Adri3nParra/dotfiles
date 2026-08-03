@@ -258,6 +258,8 @@ command -v scw >/dev/null 2>&1 &&
 command -v cosign >/dev/null 2>&1 &&
   _completion_cache cosign cosign completion bash
 
+command -v velero >/dev/null 2>&1 &&
+  _completion_cache velero velero completion bash
 
 # Python argcomplete
 if command -v register-python-argcomplete >/dev/null 2>&1; then
