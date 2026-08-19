@@ -52,19 +52,12 @@ plugins=(
 # ─────────────────────────────────────────────
 # KUBERNETES PROMPT
 # ─────────────────────────────────────────────
-# Toute la configuration du thème doit être définie
-# avant de charger oh-my-bash.sh.
+# La configuration doit être définie avant de charger Oh My Bash.
 
 KUBE_PS1_SCRIPT="$OSH/custom/kube-ps1/kube-ps1.sh"
 
 if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   source "$KUBE_PS1_SCRIPT"
-
-  # Conserve une copie interne de kube_ps1 pour le thème Powerline.
-  if declare -F kube_ps1 >/dev/null 2>&1; then
-    eval "_kube_ps1_render() $(declare -f kube_ps1 | tail -n +2)"
-    unset -f kube_ps1
-  fi
 
   KUBE_PS1_SYMBOL_COLOR=""
   KUBE_PS1_CTX_COLOR=""
@@ -79,36 +72,13 @@ if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   KUBE_PS1_PREFIX=""
   KUBE_PS1_SUFFIX=""
 
-  KUBE_THEME_PROMPT_COLOR=237
-
   _kube_short_cluster() {
     printf '%s\n' "${1#*@}"
   }
 
   KUBE_PS1_CLUSTER_FUNCTION=_kube_short_cluster
-
-  __powerline_kube_prompt() {
-    local kube
-
-    declare -F _kube_ps1_render >/dev/null 2>&1 || return
-
-    kube="$(
-      _kube_ps1_render |
-        sed $'s/\033\\[[0-9;]*m//g'
-    )"
-
-    [[ -n "$kube" ]] || return
-
-    _omb_util_print "${kube}|${KUBE_THEME_PROMPT_COLOR}"
-  }
 fi
-
-POWERLINE_PROMPT="user_info scm python_venv ruby cwd kube"
-
-POWERLINE_PROMPT_USER_INFO_MODE="sudo"
-
-OMB_THEME_POWERLINE_ICON_USER="🧬"
-OMB_THEME_POWERLINE_ICON_CLOCK=""
+unset KUBE_PS1_SCRIPT
 
 if [[ -r "$OSH/oh-my-bash.sh" ]]; then
   source "$OSH/oh-my-bash.sh"
@@ -118,18 +88,18 @@ fi
 
 # Enrichit le thème minimal sans dépendre de Powerline.
 if [[ "$OSH_THEME" == "minimal" ]] &&
-   declare -F _kube_ps1_render >/dev/null 2>&1 &&
+   declare -F kube_ps1 >/dev/null 2>&1 &&
    declare -F _omb_util_add_prompt_command >/dev/null 2>&1; then
-  _minimal_flyline_prompt_command() {
+  _minimal_kube_prompt_command() {
     local kube
 
-    kube="$(_kube_ps1_render)"
+    kube="$(kube_ps1)"
     if [[ -n "$kube" ]]; then
       PS1="${PS1% } ${_omb_prompt_purple}${kube}${_omb_prompt_reset_color} "
     fi
   }
 
-  _omb_util_add_prompt_command _minimal_flyline_prompt_command
+  _omb_util_add_prompt_command _minimal_kube_prompt_command
 fi
 
 
@@ -510,6 +480,9 @@ FLYLINE_BUILTIN="/home/linuxbrew/.linuxbrew/opt/flyline/lib/bash/flyline"
 
 if [[ -r "$FLYLINE_BUILTIN" ]] &&
    enable -f "$FLYLINE_BUILTIN" flyline 2>/dev/null; then
+  # Numérote discrètement les lignes des commandes multilignes.
+  PS2='\e[2;35mFLYLINE_PROMPT_LINE_NUMBER│\e[0m '
+
   # Profil sobre et peu intrusif.
   flyline mouse --mode disabled
   flyline \
@@ -528,7 +501,12 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
     --sort-order alphabetical
   flyline suggestions set-fuzzy-mode folder-prefixes
 
-  # Flyline remplace Readline : rétablit explicitement les widgets FZF.
+  # Flyline remplace Readline : Ctrl+P/N héritent de tout le comportement
+  # contextuel des flèches (historique, lignes multiples et suggestions).
+  flyline key remap Ctrl+p Up
+  flyline key remap Ctrl+n Down
+
+  # Conserve les widgets FZF configurés plus haut.
   declare -F __fzf_history__ >/dev/null 2>&1 &&
     flyline key bind Ctrl+r 'always=runBashCommand(__fzf_history__)'
 
