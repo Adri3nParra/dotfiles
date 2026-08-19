@@ -503,7 +503,7 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
     --show-inline-history false \
     --select-with-mouse false
   flyline suggestions \
-    --auto-suggest true \
+    --auto-suggest false \
     --num-suggestion-rows 15 \
     --sort-order alphabetical
   flyline suggestions set-fuzzy-mode folder-prefixes
