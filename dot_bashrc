@@ -504,7 +504,7 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
     --select-with-mouse false
   flyline suggestions \
     --auto-suggest true \
-    --num-suggestion-rows 10 \
+    --num-suggestion-rows 15 \
     --sort-order alphabetical
   flyline suggestions set-fuzzy-mode folder-prefixes
 
