@@ -480,24 +480,31 @@ FLYLINE_BUILTIN="/home/linuxbrew/.linuxbrew/opt/flyline/lib/bash/flyline"
 
 if [[ -r "$FLYLINE_BUILTIN" ]] &&
    enable -f "$FLYLINE_BUILTIN" flyline 2>/dev/null; then
-  # Numérote discrètement les lignes des commandes multilignes.
+  # Prompt compact : contexte à gauche et heure discrète à droite.
+  unset PS1_FINAL RPS1_FINAL PS1_FILL_FINAL PROMPT_RULER_FINAL
   PS2='\e[2;35mFLYLINE_PROMPT_LINE_NUMBER│\e[0m '
+  RPS1='\e[2m\A\e[0m'
 
-  # Profil sobre et peu intrusif.
   flyline mouse --mode disabled
   flyline \
     --show-animations true \
-    --send-shell-integration-codes none \
+    --set-frame-rate 30 \
+    --set-idle-frame-rate 1 \
+    --send-shell-integration-codes only-prompt-pos \
     --enable-easter-eggs false
+
+  # Palette sombre officielle utilisée dans les démonstrations de Flyline.
+  flyline set-style --default-theme dark
+
   # Le backend natif reste visible avec les terminaux transparents/composités.
   flyline set-cursor --backend terminal --interpolate none
   flyline editor \
-    --auto-close-chars false \
+    --auto-close-chars true \
     --show-inline-history false \
     --select-with-mouse false
   flyline suggestions \
     --auto-suggest false \
-    --num-suggestion-rows 8 \
+    --num-suggestion-rows 10 \
     --sort-order alphabetical
   flyline suggestions set-fuzzy-mode folder-prefixes
 
@@ -515,6 +522,20 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
 
   declare -F fzf_bash_completion >/dev/null 2>&1 &&
     flyline key bind Ctrl+Space 'always=runBashCommand(fzf_bash_completion)'
+
+  # Alt+C sélectionne un dossier avec FZF et exécute directement le `cd`.
+  if declare -F __fzf_cd__ >/dev/null 2>&1; then
+    _flyline_fzf_cd() {
+      local command_line
+
+      command_line="$(__fzf_cd__)" || return
+      READLINE_LINE="$command_line"
+      READLINE_POINT=${#command_line}
+    }
+
+    flyline key bind Alt+c \
+      'always=runBashCommand(_flyline_fzf_cd)+submitOrNewline'
+  fi
 fi
 
 unset FLYLINE_BUILTIN
