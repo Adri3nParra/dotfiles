@@ -501,7 +501,7 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
   flyline editor \
     --auto-close-chars true \
     --show-inline-history false \
-    --select-with-mouse false
+    --select-with-mouse true
   flyline suggestions \
     --auto-suggest false \
     --num-suggestion-rows 15 \
