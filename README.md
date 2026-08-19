@@ -55,6 +55,9 @@ git clone --depth 1 \
 
 # Zoxide
 curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+
+# Flyline
+brew install flyline
 ```
 
 ## Appliquer les dotfiles

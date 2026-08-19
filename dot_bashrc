@@ -27,7 +27,7 @@ export PATH="/usr/local/go/bin:$PATH"
 # ─────────────────────────────────────────────
 export OSH="$HOME/.oh-my-bash"
 
-OSH_THEME="powerline-icon"
+OSH_THEME="minimal"
 
 DISABLE_AUTO_TITLE="false"
 ENABLE_CORRECTION="true"
@@ -76,6 +76,8 @@ if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   KUBE_PS1_SEPARATOR=" "
   KUBE_PS1_NS_ENABLE=true
   KUBE_PS1_SYMBOL_CUSTOM="img"
+  KUBE_PS1_PREFIX=""
+  KUBE_PS1_SUFFIX=""
 
   KUBE_THEME_PROMPT_COLOR=237
 
@@ -108,16 +110,26 @@ POWERLINE_PROMPT_USER_INFO_MODE="sudo"
 OMB_THEME_POWERLINE_ICON_USER="🧬"
 OMB_THEME_POWERLINE_ICON_CLOCK=""
 
-
-# Powerline doit être chargé avant Oh My Bash.
-if [[ -r /usr/share/powerline/bindings/bash/powerline.sh ]]; then
-  source /usr/share/powerline/bindings/bash/powerline.sh
-fi
-
 if [[ -r "$OSH/oh-my-bash.sh" ]]; then
   source "$OSH/oh-my-bash.sh"
 else
   printf 'Oh My Bash introuvable : %s\n' "$OSH/oh-my-bash.sh" >&2
+fi
+
+# Enrichit le thème minimal sans dépendre de Powerline.
+if [[ "$OSH_THEME" == "minimal" ]] &&
+   declare -F _kube_ps1_render >/dev/null 2>&1 &&
+   declare -F _omb_util_add_prompt_command >/dev/null 2>&1; then
+  _minimal_flyline_prompt_command() {
+    local kube
+
+    kube="$(_kube_ps1_render)"
+    if [[ -n "$kube" ]]; then
+      PS1="${PS1% } ${_omb_prompt_purple}${kube}${_omb_prompt_reset_color} "
+    fi
+  }
+
+  _omb_util_add_prompt_command _minimal_flyline_prompt_command
 fi
 
 
@@ -488,3 +500,43 @@ if [[ -z "${SSH_CONNECTION:-}" ]] &&
     '🐧 Welcome back, kernel enjoyer.' \
     '💀 No GUI panic, only shell power.'
 fi
+
+
+# ─────────────────────────────────────────────
+# FLYLINE
+# ─────────────────────────────────────────────
+# Charge le builtin Homebrew une fois le prompt, Readline et FZF configurés.
+FLYLINE_BUILTIN="/home/linuxbrew/.linuxbrew/opt/flyline/lib/bash/flyline"
+
+if [[ -r "$FLYLINE_BUILTIN" ]] &&
+   enable -f "$FLYLINE_BUILTIN" flyline 2>/dev/null; then
+  # Profil sobre et peu intrusif.
+  flyline mouse --mode disabled
+  flyline \
+    --show-animations true \
+    --send-shell-integration-codes none \
+    --enable-easter-eggs false
+  # Le backend natif reste visible avec les terminaux transparents/composités.
+  flyline set-cursor --backend terminal --interpolate none
+  flyline editor \
+    --auto-close-chars false \
+    --show-inline-history false \
+    --select-with-mouse false
+  flyline suggestions \
+    --auto-suggest false \
+    --num-suggestion-rows 8 \
+    --sort-order alphabetical
+  flyline suggestions set-fuzzy-mode folder-prefixes
+
+  # Flyline remplace Readline : rétablit explicitement les widgets FZF.
+  declare -F __fzf_history__ >/dev/null 2>&1 &&
+    flyline key bind Ctrl+r 'always=runBashCommand(__fzf_history__)'
+
+  declare -F fzf-file-widget >/dev/null 2>&1 &&
+    flyline key bind Ctrl+t 'always=runBashCommand(fzf-file-widget)'
+
+  declare -F fzf_bash_completion >/dev/null 2>&1 &&
+    flyline key bind Ctrl+Space 'always=runBashCommand(fzf_bash_completion)'
+fi
+
+unset FLYLINE_BUILTIN
