@@ -39,6 +39,9 @@ _cloud_reset_variables() {
     unset OS_PASSWORD
     unset OS_USER_DOMAIN_NAME
     unset OS_PROJECT_DOMAIN_NAME
+    unset OS_IDENTITY_API_VERSION
+    unset OS_TENANT_ID
+    unset OS_TENANT_NAME
 
     # Scaleway
     unset SCW_PROFILE
@@ -121,8 +124,11 @@ _cloud_load_profile() {
     [[ -n "${AWS_PROFILE:-}" ]] &&
         echo "   AWS profile   : $AWS_PROFILE"
 
-    [[ -n "${OS_CLOUD:-}" ]] &&
+    if [[ -n "${OS_CLOUD:-}" ]]; then
         echo "   OpenStack     : $OS_CLOUD"
+    elif [[ -n "${OS_AUTH_URL:-}" ]]; then
+        echo "   OpenStack     : openrc${OS_REGION_NAME:+ ($OS_REGION_NAME)}"
+    fi
 
     [[ -n "${SCW_PROFILE:-}" ]] &&
         echo "   Scaleway      : $SCW_PROFILE"

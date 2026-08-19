@@ -47,7 +47,7 @@ Le fonctionnement est identique pour les autres fournisseurs :
 | -------------------- | ----------------------------- | --------------------------------------- |
 | AWS                  | `AWS_PROFILE`                 | `~/.aws/config` et `~/.aws/credentials` |
 | Scaleway             | `SCW_PROFILE`                 | `~/.config/scw/config.yaml`             |
-| OpenStack / OVHcloud | `OS_CLOUD`                    | `~/.config/openstack/clouds.yaml`       |
+| OpenStack / OVHcloud | Variables `OS_*`              | `~/.config/openstack/openrc.sh`         |
 | GCP                  | `CLOUDSDK_ACTIVE_CONFIG_NAME` | `~/.config/gcloud/`                     |
 | Azure                | Session Azure CLI             | `~/.azure/`                             |
 
@@ -241,38 +241,23 @@ Contenu :
 ```bash
 export CLOUD_PROVIDER="ovhcloud"
 
-export OS_CLOUD="ovh-prod"
-export OS_REGION_NAME="GRA11"
+# shellcheck disable=SC1091
+source "$HOME/.config/openstack/openrc.sh"
 
 export KUBECONFIG="$HOME/.kube/fabrique-prod.yaml"
 export TF_VAR_environment="prod"
 ```
 
-Les credentials sont configurés dans :
+Les variables OpenStack et les credentials sont configurés dans :
 
 ```text
-~/.config/openstack/clouds.yaml
-```
-
-Exemple :
-
-```yaml
-clouds:
-  ovh-prod:
-    auth:
-      auth_url: https://auth.cloud.ovh.net/v3
-      application_credential_id: "APPLICATION_CREDENTIAL_ID"
-      application_credential_secret: "APPLICATION_CREDENTIAL_SECRET"
-    region_name: GRA11
-    interface: public
-    identity_api_version: 3
-    auth_type: v3applicationcredential
+~/.config/openstack/openrc.sh
 ```
 
 Protéger le fichier :
 
 ```bash
-chmod 600 ~/.config/openstack/clouds.yaml
+chmod 600 ~/.config/openstack/openrc.sh
 ```
 
 Test :
@@ -360,7 +345,7 @@ Les fichiers de profils servent uniquement à sélectionner un contexte :
 
 ```bash
 export AWS_PROFILE="lab"
-export OS_CLOUD="ovh-prod"
+source "$HOME/.config/openstack/openrc.sh"
 export SCW_PROFILE="dev"
 ```
 
@@ -381,7 +366,7 @@ Les secrets restent gérés par les outils natifs :
 ```text
 AWS        → ~/.aws/credentials
 Scaleway   → ~/.config/scw/config.yaml
-OpenStack  → ~/.config/openstack/clouds.yaml
+OpenStack  → ~/.config/openstack/openrc.sh
 GCP        → ~/.config/gcloud/
 Azure      → ~/.azure/
 ```
@@ -391,13 +376,11 @@ Le flux est donc :
 ```text
 cloud use ovh-prod
         ↓
-OS_CLOUD=ovh-prod
+chargement de ~/.config/openstack/openrc.sh
         ↓
 openstack server list
         ↓
-OpenStack lit ~/.config/openstack/clouds.yaml
-        ↓
-OpenStack utilise les credentials du profil ovh-prod
+OpenStack utilise les variables OS_* chargées
 ```
 
 ## Intégration avec chezmoi
@@ -453,7 +436,7 @@ az login
 Pour OpenStack, il faudra également recréer ou restaurer localement :
 
 ```text
-~/.config/openstack/clouds.yaml
+~/.config/openstack/openrc.sh
 ```
 
 ## Permissions
@@ -470,7 +453,7 @@ Pour les fichiers contenant réellement des secrets :
 
 ```bash
 chmod 600 ~/.aws/credentials
-chmod 600 ~/.config/openstack/clouds.yaml
+chmod 600 ~/.config/openstack/openrc.sh
 chmod 600 ~/.config/scw/config.yaml
 ```
 
@@ -520,4 +503,3 @@ Ce gestionnaire :
 * sélectionne uniquement les profils et variables du shell courant.
 
 La fonction doit être sourcée dans le shell. Elle ne doit pas être lancée comme un script classique, car un processus enfant ne peut pas modifier durablement les variables de son shell parent.
-
