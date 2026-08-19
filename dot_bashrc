@@ -488,10 +488,10 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
     --sort-order alphabetical
   flyline suggestions set-fuzzy-mode folder-prefixes
 
-  # Flyline remplace Readline : Ctrl+P/N héritent de tout le comportement
-  # contextuel des flèches (historique, lignes multiples et suggestions).
+  # Flyline remplace Readline : Ctrl+P/N && bind
   flyline key remap Ctrl+p Up
   flyline key remap Ctrl+n Down
+  flyline key bind Ctrl+A always=selectAll
 
   # Conserve les widgets FZF configurés plus haut.
   declare -F __fzf_history__ >/dev/null 2>&1 &&
@@ -503,19 +503,6 @@ if [[ -r "$FLYLINE_BUILTIN" ]] &&
   declare -F fzf_bash_completion >/dev/null 2>&1 &&
     flyline key bind Ctrl+Space 'always=runBashCommand(fzf_bash_completion)'
 
-  # Alt+C sélectionne un dossier avec FZF et exécute directement le `cd`.
-  if declare -F __fzf_cd__ >/dev/null 2>&1; then
-    _flyline_fzf_cd() {
-      local command_line
-
-      command_line="$(__fzf_cd__)" || return
-      READLINE_LINE="$command_line"
-      READLINE_POINT=${#command_line}
-    }
-
-    flyline key bind Alt+c \
-      'always=runBashCommand(_flyline_fzf_cd)+submitOrNewline'
-  fi
 fi
 
 unset FLYLINE_BUILTIN
