@@ -452,26 +452,6 @@ if [[ -r "$HOME/.config/openstack/openrc.sh" ]]; then
   source "$HOME/.config/openstack/openrc.sh"
 fi
 
-
-# ─────────────────────────────────────────────
-# TERMINAL WELCOME
-# ─────────────────────────────────────────────
-# Seulement dans le premier shell local, pas en SSH ni dans les sous-shells.
-if [[ -z "${SSH_CONNECTION:-}" ]] &&
-   [[ ${SHLVL:-1} -eq 1 ]] &&
-   [[ -t 1 ]] &&
-   command -v figlet >/dev/null 2>&1; then
-  clear
-
-  figlet -f slant "Linux"
-  figlet -f slant "For the win"
-
-  printf '%s\n' \
-    '🐧 Welcome back, kernel enjoyer.' \
-    '💀 No GUI panic, only shell power.'
-fi
-
-
 # ─────────────────────────────────────────────
 # FLYLINE
 # ─────────────────────────────────────────────
