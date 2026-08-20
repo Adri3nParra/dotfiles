@@ -1,0 +1,58 @@
+[bootstrap.packages]
+# Paquets de base fournis par le gestionnaire natif sur Debian/Ubuntu.
+"apt:curl" = "latest"
+"apt:git" = "latest"
+"apt:jq" = "latest"
+"apt:wget" = "latest"
+"apt:bat" = "latest"
+"apt:btop" = "latest"
+"apt:duf" = "latest"
+"apt:eza" = "latest"
+"apt:moreutils" = "latest"
+"apt:xdg-utils" = "latest"
+
+# Outils communs installés à partir des bottles Homebrew par mise.
+"brew:zoxide" = "latest"
+"brew:fd" = "latest"
+"brew:yazi" = "latest"
+"brew:git-delta" = "latest"
+"brew:hyperfine" = "latest"
+"brew:go-task" = "latest"
+"brew:shellcheck" = "latest"
+"brew:shfmt" = "latest"
+"brew:stern" = "latest"
+"brew:argocd" = "latest"
+"brew:kubeconform" = "latest"
+"brew:velero" = "latest"
+"brew:age" = "latest"
+"brew:sops" = "latest"
+"brew:cosign" = "latest"
+"brew:trivy" = "latest"
+"brew:opentofu" = "latest"
+"brew:terragrunt" = "latest"
+"brew:ansible" = "latest"
+"brew:httpie" = "latest"
+"brew:fzf" = "latest"
+"brew:ripgrep" = "latest"
+"brew:kubernetes-cli" = "latest"
+"brew:kubectx" = "latest"
+"brew:kubecm" = "latest"
+"brew:helm" = "latest"
+"brew:dive" = "latest"
+"brew:ffuf" = "latest"
+"brew:flyline" = "latest"
+"brew:gh" = "latest"
+"brew:glab" = "latest"
+"brew:kubeseal" = "latest"
+"brew:magic-wormhole" = "latest"
+"brew:tree" = "latest"
+"brew:yq" = "latest"
+
+[bootstrap.repos]
+"~/.oh-my-bash" = { url = "https://github.com/ohmybash/oh-my-bash.git" }
+"~/.local/share/kube-ps1" = { url = "https://github.com/jonmosco/kube-ps1.git" }
+"~/.local/share/fzf-tab-completion" = { url = "https://github.com/lincheney/fzf-tab-completion.git" }
+
+[tasks.apply]
+description = "Do chezmoi apply"
+run = "chezmoi apply"

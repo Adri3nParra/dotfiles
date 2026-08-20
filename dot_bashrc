@@ -54,7 +54,7 @@ plugins=(
 # ─────────────────────────────────────────────
 # La configuration doit être définie avant de charger Oh My Bash.
 
-KUBE_PS1_SCRIPT="$OSH/custom/kube-ps1/kube-ps1.sh"
+KUBE_PS1_SCRIPT="$HOME/.local/share/kube-ps1/kube-ps1.sh"
 
 if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   source "$KUBE_PS1_SCRIPT"
@@ -170,6 +170,11 @@ if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
   if [[ -r "$HOMEBREW_PREFIX/etc/bash_completion.d/brew" ]]; then
     source "$HOMEBREW_PREFIX/etc/bash_completion.d/brew"
   fi
+fi
+
+# Mise
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
 fi
 
 # Zoxide

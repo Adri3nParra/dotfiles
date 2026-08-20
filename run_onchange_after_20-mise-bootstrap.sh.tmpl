@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Relancer ce script lorsque la configuration mise change :
+# Configuration cible : ~/.config/mise/config.toml
+# {{ include "private_dot_config/mise/config.toml" | sha256sum }}
+export PATH="$HOME/.local/bin:$PATH"
+
+mise -C "$HOME" bootstrap --yes
