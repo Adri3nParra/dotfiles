@@ -4,7 +4,7 @@
 "apt:git" = "latest"
 "apt:jq" = "latest"
 "apt:wget" = "latest"
-"apt:bat" = "latest"
+"apt:batcat" = "latest"
 "apt:btop" = "latest"
 "apt:duf" = "latest"
 "apt:eza" = "latest"

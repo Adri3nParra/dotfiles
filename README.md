@@ -8,6 +8,8 @@ Kubernetes, les fonctions Cloud/Platform et les raccourcis FZF.
 Installer chezmoi dans `~/.local/bin`, puis appliquer les dotfiles :
 
 ```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"
 sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 chezmoi init --apply git@github.com:Adri3nParra/dotfiles.git
