@@ -271,6 +271,9 @@ command -v velero >/dev/null 2>&1 &&
 command -v dive >/dev/null 2>&1 &&
   _completion_cache dive dive completion bash
 
+command -v kubecm >/dev/null 2>&1 &&
+  _completion_cache kubecm kubecm completion bash
+
 # Python argcomplete
 if command -v register-python-argcomplete >/dev/null 2>&1; then
   command -v ansible >/dev/null 2>&1 &&
