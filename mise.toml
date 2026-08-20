@@ -1,0 +1,3 @@
+[tasks.apply]
+description = "Do chezmoi apply"
+run = "chezmoi apply"

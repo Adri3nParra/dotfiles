@@ -274,6 +274,9 @@ command -v dive >/dev/null 2>&1 &&
 command -v kubecm >/dev/null 2>&1 &&
   _completion_cache kubecm kubecm completion bash
 
+command -v mise >/dev/null 2>&1 &&
+  _completion_cache mise-v2 mise completion bash --include-bash-completion-lib
+
 # Python argcomplete
 if command -v register-python-argcomplete >/dev/null 2>&1; then
   command -v ansible >/dev/null 2>&1 &&
