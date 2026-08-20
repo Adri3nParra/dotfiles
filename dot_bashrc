@@ -86,6 +86,17 @@ else
   printf 'Oh My Bash introuvable : %s\n' "$OSH/oh-my-bash.sh" >&2
 fi
 
+# Le thème minimal utilise \W (dernier dossier uniquement) par défaut.
+# Utilise \w sans PROMPT_DIRTRIM pour afficher tous les dossiers du chemin.
+if [[ "$OSH_THEME" == "minimal" ]] &&
+   declare -F _omb_theme_PROMPT_COMMAND >/dev/null 2>&1; then
+  unset PROMPT_DIRTRIM
+
+  _omb_theme_PROMPT_COMMAND() {
+    PS1="$(scm_prompt_info)${_omb_prompt_reset_color} ${_omb_prompt_teal}\w${_omb_prompt_reset_color} "
+  }
+fi
+
 # Enrichit le thème minimal sans dépendre de Powerline.
 if [[ "$OSH_THEME" == "minimal" ]] &&
    declare -F kube_ps1 >/dev/null 2>&1 &&
