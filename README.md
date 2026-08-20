@@ -8,18 +8,16 @@ Kubernetes, les fonctions Cloud/Platform et les raccourcis FZF.
 Installer chezmoi dans `~/.local/bin`, puis appliquer les dotfiles :
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"
 sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 chezmoi init --apply git@github.com:Adri3nParra/dotfiles.git
 exec bash
 ```
 
-L'application installe d'abord mise, puis `mise bootstrap` installe les
-paquets Apt et Homebrew et clone les dépendances du shell. Homebrew n'a pas
-besoin d'être installé au préalable. Un mot de passe sudo peut être demandé
-pour les paquets système et la création initiale du préfixe Homebrew.
+L'application installe d'abord mise et Homebrew, puis `mise bootstrap`
+installe les paquets et clone les dépendances du shell. Un mot de passe sudo
+peut être demandé pour les prérequis système et la création initiale du
+préfixe Homebrew.
 
 ## Maintenance
 

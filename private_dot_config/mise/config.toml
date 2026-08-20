@@ -1,8 +1,11 @@
 [bootstrap.packages]
 # Paquets de base fournis par le gestionnaire natif sur Debian/Ubuntu.
+"apt:build-essential" = "latest"
 "apt:curl" = "latest"
+"apt:file" = "latest"
 "apt:git" = "latest"
 "apt:jq" = "latest"
+"apt:procps" = "latest"
 "apt:wget" = "latest"
 "apt:xdg-utils" = "latest"
 
