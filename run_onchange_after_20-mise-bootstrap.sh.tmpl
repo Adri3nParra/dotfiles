@@ -6,4 +6,5 @@ set -euo pipefail
 # {{ include "private_dot_config/mise/config.toml" | sha256sum }}
 export PATH="$HOME/.local/bin:$PATH"
 
+mise trust "$HOME/.config/mise/config.toml"
 mise -C "$HOME" bootstrap --yes
