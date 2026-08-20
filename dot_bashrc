@@ -126,6 +126,8 @@ bind 'TAB:menu-complete'
 HISTSIZE=10000
 HISTFILESIZE=10000
 HISTCONTROL="ignoreboth:erasedups"
+# Ignore les wrappers techniques injectés par certains lanceurs de terminal.
+HISTIGNORE="${HISTIGNORE:+${HISTIGNORE}:}eval -- \$'*"
 
 # Ne remets pas HISTTIMEFORMAT globalement :
 # certaines intégrations FZF anciennes le gèrent mal.
