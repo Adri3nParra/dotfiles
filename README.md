@@ -10,7 +10,7 @@ Installer chezmoi dans `~/.local/bin`, puis appliquer les dotfiles :
 ```bash
 sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
-chezmoi init --apply git@github.com:Adri3nParra/dotfiles.git
+chezmoi init --apply Adri3nParra
 exec bash
 ```
 
