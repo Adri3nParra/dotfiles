@@ -166,6 +166,10 @@ history-time() {
 # Homebrew
 if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
   eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+  if [[ -r "$HOMEBREW_PREFIX/etc/bash_completion.d/brew" ]]; then
+    source "$HOMEBREW_PREFIX/etc/bash_completion.d/brew"
+  fi
 fi
 
 # Zoxide
@@ -263,6 +267,9 @@ command -v cosign >/dev/null 2>&1 &&
 
 command -v velero >/dev/null 2>&1 &&
   _completion_cache velero velero completion bash
+
+command -v dive >/dev/null 2>&1 &&
+  _completion_cache dive dive completion bash
 
 # Python argcomplete
 if command -v register-python-argcomplete >/dev/null 2>&1; then
