@@ -216,19 +216,28 @@ _completion_cache() {
   shift
 
   local cache="$BASH_COMPLETION_CACHE/$name"
+  local tmp
   local today
 
   today="$(date +%F)"
 
   if [[ ! -s "$cache" ]] ||
-     [[ "$(date -r "$cache" +%F 2>/dev/null)" != "$today" ]]; then
-    "$@" >| "$cache" 2>/dev/null || {
-      rm -f "$cache"
-      return 0
-    }
+     [[ "$(date -r "$cache" +%F 2>/dev/null)" != "$today" ]] ||
+     ! bash -n "$cache" 2>/dev/null; then
+    tmp="$(mktemp "${cache}.tmp.XXXXXX")" || return 0
+
+    if "$@" >| "$tmp" 2>/dev/null &&
+       [[ -s "$tmp" ]] &&
+       bash -n "$tmp" 2>/dev/null; then
+      mv -f -- "$tmp" "$cache"
+    else
+      rm -f -- "$tmp"
+    fi
   fi
 
-  [[ -r "$cache" ]] && source "$cache"
+  if [[ -r "$cache" ]] && bash -n "$cache" 2>/dev/null; then
+    source "$cache"
+  fi
 }
 
 command -v kubectl >/dev/null 2>&1 &&
@@ -280,7 +289,7 @@ command -v kubecm >/dev/null 2>&1 &&
   _completion_cache kubecm kubecm completion bash
 
 command -v mise >/dev/null 2>&1 &&
-  _completion_cache mise-v2 mise completion bash --include-bash-completion-lib
+  _completion_cache mise-v2 mise completion bash
 
 # Python argcomplete
 if command -v register-python-argcomplete >/dev/null 2>&1; then
