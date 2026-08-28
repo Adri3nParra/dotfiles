@@ -1,7 +1,7 @@
-# Dotfiles Bash
+# Dotfiles Zsh
 
-Configuration Bash gérée avec chezmoi. Elle fournit Oh My Bash, le prompt
-Kubernetes, les fonctions Cloud/Platform et les raccourcis FZF.
+Configuration Zsh gérée avec chezmoi. Elle fournit Oh My Zsh, le prompt
+Git/Kubernetes, les fonctions Cloud/Platform, ZLE et les raccourcis FZF.
 
 ## Nouvelle machine
 
@@ -11,13 +11,22 @@ Installer chezmoi dans `~/.local/bin`, puis appliquer les dotfiles :
 sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 chezmoi init --apply Adri3nParra
-exec bash
+exec zsh
 ```
 
 L'application installe d'abord mise et Homebrew, puis `mise bootstrap`
-installe les paquets et clone les dépendances du shell. Un mot de passe sudo
-peut être demandé pour les prérequis système et la création initiale du
-préfixe Homebrew.
+installe Zsh, les paquets et les plugins du shell. Un mot de passe sudo peut
+être demandé pour les prérequis système et la création initiale du préfixe
+Homebrew.
+
+Pour faire de Zsh le shell de connexion, exécuter une fois :
+
+```bash
+chsh -s "$(command -v zsh)"
+```
+
+Lors de la migration, l'historique `~/.bash_history` est repris dans
+`~/.zsh_history` si ce dernier n'existe pas encore.
 
 ## Maintenance
 
@@ -36,7 +45,7 @@ mise bootstrap packages use \
 chezmoi apply
 ```
 
-Pour recharger Bash après une modification :
+Pour recharger Zsh après une modification :
 
 ```bash
 reload
@@ -46,7 +55,8 @@ reload
 
 | Touche | Action |
 | --- | --- |
-| `Tab` | Complétion Bash suivante |
+| `Tab` | Complète le préfixe courant |
+| `Tab Tab` | Insère puis parcourt les complétions en ligne |
 | `Shift+Tab` | Complétion précédente |
 | `Ctrl+Espace` | Menu de complétion FZF |
 | `Ctrl+R` | Recherche dans l'historique |

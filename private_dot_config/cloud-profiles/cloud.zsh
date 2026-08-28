@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# Gestionnaire de profils cloud pour Zsh.
 # ─────────────────────────────────────────────
 # CLOUD PROFILE MANAGER
 # ─────────────────────────────────────────────
@@ -92,7 +92,7 @@ _cloud_select_profile() {
     else
         echo "fzf n'est pas installé." >&2
         echo "Profils disponibles :" >&2
-        printf '  %s\n' $profiles >&2
+        printf '  %s\n' "${(@f)profiles}" >&2
         return 1
     fi
 }
@@ -223,31 +223,28 @@ EOF
 }
 
 _cloud_completion() {
-    local current previous actions profiles
+    local -a actions profiles
 
-    current="${COMP_WORDS[COMP_CWORD]}"
-    previous="${COMP_WORDS[COMP_CWORD - 1]}"
+    actions=(
+        'use:activer un profil'
+        'list:lister les profils'
+        'ls:lister les profils'
+        'current:afficher le profil actif'
+        'show:afficher les variables actives'
+        'unset:désactiver le profil actif'
+        'clear:désactiver le profil actif'
+        'reload:recharger le profil actif'
+        'edit:éditer un profil'
+        'path:afficher le dossier des profils'
+        'help:afficher l’aide'
+    )
 
-    actions="use list ls current show unset clear reload edit path help"
-
-    case "$COMP_CWORD" in
-        1)
-            mapfile -t COMPREPLY < <(
-                compgen -W "$actions" -- "$current"
-            )
-            ;;
-
-        2)
-            case "$previous" in
-                use | edit)
-                    profiles="$(_cloud_profile_names)"
-                    mapfile -t COMPREPLY < <(
-                        compgen -W "$profiles" -- "$current"
-                    )
-                    ;;
-            esac
-            ;;
-    esac
+    if (( CURRENT == 2 )); then
+        _describe 'action cloud' actions
+    elif (( CURRENT == 3 )) && [[ "${words[2]}" == use || "${words[2]}" == edit ]]; then
+        profiles=("${(@f)$(_cloud_profile_names)}")
+        _describe 'profil cloud' profiles
+    fi
 }
 
-complete -F _cloud_completion cloud
+compdef _cloud_completion cloud

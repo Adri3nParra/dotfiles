@@ -1,0 +1,14 @@
+#compdef gitlab-ci-local
+
+_gitlab_ci_local() {
+  local -a candidates
+
+  candidates=("${(@f)$(command gitlab-ci-local --get-yargs-completions "${words[@]}" 2>/dev/null)}")
+  if (( ${#candidates[@]} )); then
+    _describe 'option gitlab-ci-local' candidates
+  else
+    _files
+  fi
+}
+
+_gitlab_ci_local "$@"

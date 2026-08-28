@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reprend l'historique Bash lors de la première activation de Zsh.
+if [[ -s "$HOME/.bash_history" && ! -e "$HOME/.zsh_history" ]]; then
+  umask 077
+  history_tmp="$(mktemp "$HOME/.zsh_history.XXXXXX")"
+  awk -v now="$(date +%s)" '
+    /^#[0-9]+$/ { timestamp = substr($0, 2); next }
+    NF {
+      printf ": %s:0;%s\n", (timestamp ? timestamp : now), $0
+      timestamp = ""
+    }
+  ' "$HOME/.bash_history" > "$history_tmp"
+  mv -f -- "$history_tmp" "$HOME/.zsh_history"
+fi
+
+if command -v brew >/dev/null 2>&1 && brew list --formula flyline >/dev/null 2>&1; then
+  brew uninstall flyline
+fi
+
+# Dépendances remplacées par leurs équivalents Zsh.
+rm -rf -- \
+  "$HOME/.oh-my-bash" \
+  "$HOME/.local/share/fzf-tab-completion"
+
+if command -v zsh >/dev/null 2>&1 && [[ "${SHELL:-}" != "$(command -v zsh)" ]]; then
+  printf '%s\n  chsh -s %q\n' \
+    'Zsh est installé. Pour en faire le shell de connexion :' \
+    "$(command -v zsh)"
+fi

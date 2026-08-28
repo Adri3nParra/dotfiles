@@ -1,6 +1,6 @@
 # Cloud Profile Manager
 
-Petit gestionnaire de profils cloud pour Bash.
+Petit gestionnaire de profils cloud pour Zsh.
 
 Il permet de changer rapidement de contexte entre plusieurs fournisseurs cloud sans avoir à modifier manuellement les variables d’environnement ou à changer de dossier.
 
@@ -55,14 +55,14 @@ Le fonctionnement est identique pour les autres fournisseurs :
 
 ```text
 ~/.config/cloud-profiles/
-├── cloud.sh
+├── cloud.zsh
 └── profiles/
     ├── aws-lab.env
     ├── ovh-prod.env
     └── scaleway-dev.env
 ```
 
-* `cloud.sh` contient la fonction Bash `cloud`.
+* `cloud.zsh` contient la fonction Zsh `cloud`.
 * `profiles/` contient les contextes disponibles.
 * Les fichiers `*.env` ne doivent pas contenir de secrets.
 
@@ -82,20 +82,20 @@ Les profils peuvent tout de même être activés directement sans `fzf` :
 cloud use ovh-prod
 ```
 
-### Chargement dans Bash
+### Chargement dans Zsh
 
-Ajouter dans `~/.bashrc` :
+Ajouter dans `~/.zshrc` :
 
 ```bash
-if [[ -f "$HOME/.config/cloud-profiles/cloud.sh" ]]; then
-    source "$HOME/.config/cloud-profiles/cloud.sh"
+if [[ -f "$HOME/.config/cloud-profiles/cloud.zsh" ]]; then
+    source "$HOME/.config/cloud-profiles/cloud.zsh"
 fi
 ```
 
 Recharger le shell :
 
 ```bash
-source ~/.bashrc
+source ~/.zshrc
 ```
 
 Vérifier que la fonction est disponible :

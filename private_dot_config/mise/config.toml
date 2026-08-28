@@ -8,6 +8,7 @@
 "apt:procps" = "latest"
 "apt:wget" = "latest"
 "apt:xdg-utils" = "latest"
+"apt:zsh" = "latest"
 
 # Outils communs installés à partir des bottles Homebrew par mise.
 "brew:bat" = "latest"
@@ -43,7 +44,6 @@
 "brew:helm" = "latest"
 "brew:dive" = "latest"
 "brew:ffuf" = "latest"
-"brew:flyline" = "latest"
 "brew:gh" = "latest"
 "brew:glab" = "latest"
 "brew:kubeseal" = "latest"
@@ -52,9 +52,12 @@
 "brew:yq" = "latest"
 
 [bootstrap.repos]
-"~/.oh-my-bash" = { url = "https://github.com/ohmybash/oh-my-bash.git" }
+"~/.oh-my-zsh" = { url = "https://github.com/ohmyzsh/ohmyzsh.git" }
 "~/.local/share/kube-ps1" = { url = "https://github.com/jonmosco/kube-ps1.git" }
-"~/.local/share/fzf-tab-completion" = { url = "https://github.com/lincheney/fzf-tab-completion.git" }
+"~/.local/share/zsh/plugins/fzf-tab" = { url = "https://github.com/Aloxaf/fzf-tab.git" }
+"~/.local/share/zsh/plugins/zsh-autopair" = { url = "https://github.com/hlissner/zsh-autopair.git" }
+"~/.local/share/zsh/plugins/zsh-autosuggestions" = { url = "https://github.com/zsh-users/zsh-autosuggestions.git" }
+"~/.local/share/zsh/plugins/zsh-syntax-highlighting" = { url = "https://github.com/zsh-users/zsh-syntax-highlighting.git" }
 
 [tasks.apply]
 description = "Do chezmoi apply"

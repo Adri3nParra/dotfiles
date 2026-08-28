@@ -1,0 +1,59 @@
+# Complétion dynamique absente du générateur Zsh officiel d'Argo CD.
+
+_argocd_local_values() {
+  local description="$1"
+  shift
+  local -a values
+
+  values=("${(@f)$(command "$@" 2>/dev/null)}")
+  (( ${#values[@]} )) || return 1
+  _describe "$description" values
+  return 0
+}
+
+_argocd_local() {
+  local group="${words[2]:-}" action="${words[3]:-}"
+  local complete_apps=0
+  local -a app_actions multi_app_actions
+
+  app_actions=(
+    create delete diff edit get history manifests patch-resource set sync
+    terminate-op unset wait
+  )
+  multi_app_actions=(delete sync wait)
+
+  # Le script Bash livré par Argo CD possède ce traitement dynamique, mais le
+  # script Zsh généré l'omet. Le premier argument de ces actions est un nom
+  # d'application existante.
+  if [[ "$group" == app && "${words[CURRENT]:-}" != --* ]]; then
+    if [[ "$action" == rollback ]]; then
+      if (( CURRENT == 4 )) &&
+         _argocd_local_values 'application Argo CD' \
+           argocd app list --output name; then
+        return
+      elif (( CURRENT == 5 )) &&
+           _argocd_local_values 'révision Argo CD' \
+           argocd app history "${words[4]}" --output id; then
+        return
+      fi
+    elif [[ " ${app_actions[*]} " == *" ${action} "* ]]; then
+      if (( CURRENT == 4 )); then
+        complete_apps=1
+      elif (( CURRENT > 4 )) &&
+           [[ " ${multi_app_actions[*]} " == *" ${action} "* ]]; then
+        complete_apps=1
+      fi
+    fi
+
+    if (( complete_apps )) &&
+       _argocd_local_values 'application Argo CD' \
+         argocd app list --output name; then
+      return
+    fi
+  fi
+
+  # Tout le reste reste pris en charge par le générateur officiel.
+  _argocd "$@"
+}
+
+_argocd_local "$@"

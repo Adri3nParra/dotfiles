@@ -1,0 +1,409 @@
+# ─────────────────────────────────────────────
+# INTERACTIVE SHELL ONLY
+# ─────────────────────────────────────────────
+[[ -o interactive ]] || return
+
+
+# ─────────────────────────────────────────────
+# ENVIRONMENT
+# ─────────────────────────────────────────────
+export EDITOR="vim"
+export VISUAL="$EDITOR"
+
+export KUBECONFIG="$HOME/.kube/config"
+export GODEBUG="tlsmlkem=0"
+export GREP_COLORS='ms=01;31:mc=01;31:sl=:cx=:fn=35:ln=32:bn=32:se=36'
+
+typeset -U path PATH
+path=(
+  /usr/local/go/bin
+  "$HOME/.fzf/bin"
+  "$HOME/.terragrunt/bin"
+  "$HOME/.local/bin"
+  "$HOME/.opencode/bin"
+  $path
+)
+
+# Homebrew doit précéder l'initialisation des complétions Zsh.
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+elif [[ -x /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+if [[ -n "${HOMEBREW_PREFIX:-}" && -d "$HOMEBREW_PREFIX/share/zsh/site-functions" ]]; then
+  fpath=("$HOMEBREW_PREFIX/share/zsh/site-functions" $fpath)
+fi
+fpath=("$HOME/.zsh_completion.d" $fpath)
+
+
+# ─────────────────────────────────────────────
+# OH MY ZSH
+# ─────────────────────────────────────────────
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME=""
+plugins=(git)
+
+zstyle ':omz:update' mode disabled
+ZSH_DISABLE_COMPFIX=true
+COMPLETION_WAITING_DOTS=true
+
+if [[ -r "$ZSH/oh-my-zsh.sh" ]]; then
+  source "$ZSH/oh-my-zsh.sh"
+else
+  print -u2 -- "Oh My Zsh introuvable : $ZSH/oh-my-zsh.sh"
+fi
+
+# Garantit un système de complétion fonctionnel même pendant le bootstrap.
+if (( ! $+functions[compdef] )); then
+  autoload -Uz compinit
+  mkdir -p "$HOME/.cache/zsh"
+  compinit -d "$HOME/.cache/zsh/zcompdump"
+fi
+
+
+# ─────────────────────────────────────────────
+# SHELL OPTIONS AND KEYMAP
+# ─────────────────────────────────────────────
+setopt AUTO_CD
+setopt AUTO_PUSHD
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+setopt CD_SILENT
+setopt CORRECT
+setopt INTERACTIVE_COMMENTS
+setopt PROMPT_SUBST
+setopt AUTO_MENU
+unsetopt AUTO_LIST
+unsetopt LIST_BEEP
+
+bindkey -e
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey '^[[A' up-line-or-beginning-search
+bindkey '^[[B' down-line-or-beginning-search
+bindkey '^I' expand-or-complete
+bindkey '^[[Z' reverse-menu-complete
+
+zstyle ':completion:*' matcher-list \
+  'm:{a-zA-Z}={A-Za-z}' \
+  'r:|[._-]=* r:|=*'
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:descriptions' format '%F{cyan}%d%f'
+
+
+# ─────────────────────────────────────────────
+# HISTORY
+# ─────────────────────────────────────────────
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=10000
+SAVEHIST=10000
+
+setopt APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt EXTENDED_HISTORY
+setopt HIST_EXPIRE_DUPS_FIRST
+setopt HIST_FIND_NO_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS
+setopt HIST_VERIFY
+
+# Ignore les wrappers techniques injectés par certains lanceurs de terminal.
+zshaddhistory() {
+  [[ "$1" == "eval -- "\$\'* ]] && return 1
+  return 0
+}
+
+history-time() {
+  if (( $# )); then
+    fc -l -t '%d/%m %H:%M  ' "$@"
+  else
+    fc -l -t '%d/%m %H:%M  ' 1
+  fi
+}
+
+
+# ─────────────────────────────────────────────
+# EXTERNAL TOOLS
+# ─────────────────────────────────────────────
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate zsh)"
+fi
+
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+fi
+
+if [[ -r "$HOME/.cargo/env" ]]; then
+  source "$HOME/.cargo/env"
+fi
+
+
+# ─────────────────────────────────────────────
+# PROMPT
+# ─────────────────────────────────────────────
+# Palette et forme identiques au thème minimal d'Oh My Bash.
+ZSH_THEME_GIT_PROMPT_PREFIX='%F{cyan}(%F{green}'
+ZSH_THEME_GIT_PROMPT_SUFFIX='%F{cyan})%f'
+ZSH_THEME_GIT_PROMPT_DIRTY=' %F{yellow}✗'
+ZSH_THEME_GIT_PROMPT_CLEAN=' %F{green}✓'
+
+if (( ! $+functions[git_prompt_info] )); then
+  git_prompt_info() {
+    local branch state
+    branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null ||
+      command git rev-parse --short HEAD 2>/dev/null)" || return
+    [[ -n "$branch" ]] || return
+    if [[ -n "$(command git status --porcelain 2>/dev/null)" ]]; then
+      state='%F{yellow}✗'
+    else
+      state='%F{green}✓'
+    fi
+    print -nr -- "%F{cyan}(%F{green}${branch} ${state}%F{cyan})%f"
+  }
+fi
+
+KUBE_PS1_SCRIPT="$HOME/.local/share/kube-ps1/kube-ps1.sh"
+if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
+  source "$KUBE_PS1_SCRIPT"
+
+  KUBE_PS1_SYMBOL_COLOR=""
+  KUBE_PS1_CTX_COLOR=""
+  KUBE_PS1_NS_COLOR=""
+  KUBE_PS1_PREFIX_COLOR=""
+  KUBE_PS1_SUFFIX_COLOR=""
+  KUBE_PS1_BG_COLOR=""
+  KUBE_PS1_SEPARATOR=" "
+  KUBE_PS1_NS_ENABLE=true
+  KUBE_PS1_SYMBOL_CUSTOM="☸"
+  KUBE_PS1_PREFIX=""
+  KUBE_PS1_SUFFIX=""
+
+  _kube_short_cluster() {
+    printf '%s\n' "${1#*@}"
+  }
+  KUBE_PS1_CLUSTER_FUNCTION=_kube_short_cluster
+fi
+unset KUBE_PS1_SCRIPT
+
+_shell_kube_prompt() {
+  (( $+functions[kube_ps1] )) || return
+  local kube
+  kube="$(kube_ps1)"
+  [[ -n "$kube" ]] && print -nr -- " %F{magenta}${kube}%f"
+}
+
+PROMPT='$(git_prompt_info) %F{cyan}%~%f$(_shell_kube_prompt) '
+RPROMPT='%F{8}%D{%H:%M}%f'
+PS2='%F{magenta}%_│%f '
+
+
+# ─────────────────────────────────────────────
+# PERSONAL FUNCTIONS
+# ─────────────────────────────────────────────
+if [[ -r "$HOME/.config/cloud-profiles/cloud.zsh" ]]; then
+  source "$HOME/.config/cloud-profiles/cloud.zsh"
+fi
+
+for function_file in "$HOME"/.zsh_functions.d/*.zsh(N); do
+  source "$function_file"
+done
+unset function_file
+
+
+# ─────────────────────────────────────────────
+# COMPLETIONS
+# ─────────────────────────────────────────────
+ZSH_COMPLETION_CACHE="$HOME/.cache/zsh/completions"
+mkdir -p "$ZSH_COMPLETION_CACHE"
+
+_completion_cache() {
+  local name="$1" cache temporary today
+  shift
+
+  cache="$ZSH_COMPLETION_CACHE/$name.zsh"
+  today="$(date +%F)"
+
+  if [[ ! -s "$cache" ]] ||
+     [[ "$(date -r "$cache" +%F 2>/dev/null)" != "$today" ]] ||
+     ! zsh -n "$cache" 2>/dev/null; then
+    temporary="$(mktemp "${cache}.tmp.XXXXXX")" || return 0
+    if "$@" >| "$temporary" 2>/dev/null &&
+       [[ -s "$temporary" ]] && zsh -n "$temporary" 2>/dev/null; then
+      command mv -f -- "$temporary" "$cache"
+    else
+      command rm -f -- "$temporary"
+    fi
+  fi
+
+  [[ -r "$cache" ]] && zsh -n "$cache" 2>/dev/null && source "$cache"
+}
+
+command -v kubectl >/dev/null 2>&1 && _completion_cache kubectl kubectl completion zsh
+command -v helm >/dev/null 2>&1 && _completion_cache helm helm completion zsh
+command -v argocd >/dev/null 2>&1 && _completion_cache argocd argocd completion zsh
+command -v stern >/dev/null 2>&1 && _completion_cache stern stern --completion zsh
+command -v glab >/dev/null 2>&1 && _completion_cache glab glab completion -s zsh
+command -v ovhcloud >/dev/null 2>&1 && _completion_cache ovhcloud ovhcloud completion zsh
+command -v minikube >/dev/null 2>&1 && _completion_cache minikube minikube completion zsh
+command -v kubara >/dev/null 2>&1 && _completion_cache kubara kubara completion zsh
+command -v chezmoi >/dev/null 2>&1 && _completion_cache chezmoi chezmoi completion zsh
+command -v kube-bench >/dev/null 2>&1 && _completion_cache kube-bench kube-bench completion zsh
+command -v task >/dev/null 2>&1 && _completion_cache task task --completion zsh
+command -v scw >/dev/null 2>&1 && _completion_cache scw scw autocomplete script shell=zsh
+command -v cosign >/dev/null 2>&1 && _completion_cache cosign cosign completion zsh
+command -v velero >/dev/null 2>&1 && _completion_cache velero velero completion zsh
+command -v dive >/dev/null 2>&1 && _completion_cache dive dive completion zsh
+command -v kubecm >/dev/null 2>&1 && _completion_cache kubecm kubecm completion zsh
+command -v mise >/dev/null 2>&1 && _completion_cache mise mise completion zsh
+command -v kind >/dev/null 2>&1 && _completion_cache kind kind completion zsh
+command -v nerdctl >/dev/null 2>&1 && _completion_cache nerdctl nerdctl completion zsh
+
+if command -v register-python-argcomplete >/dev/null 2>&1; then
+  command -v ansible >/dev/null 2>&1 &&
+    _completion_cache ansible register-python-argcomplete --shell zsh ansible
+  command -v ansible-playbook >/dev/null 2>&1 &&
+    _completion_cache ansible-playbook register-python-argcomplete --shell zsh ansible-playbook
+  command -v ansible-galaxy >/dev/null 2>&1 &&
+    _completion_cache ansible-galaxy register-python-argcomplete --shell zsh ansible-galaxy
+fi
+
+command -v molecule >/dev/null 2>&1 &&
+  _completion_cache molecule env _MOLECULE_COMPLETE=zsh_source molecule
+
+# Les completers AWS et Terragrunt exposent uniquement l'interface Bash `-C`.
+autoload -Uz bashcompinit
+bashcompinit
+if [[ -x "$HOME/.terragrunt/bin/terragrunt" ]]; then
+  complete -C "$HOME/.terragrunt/bin/terragrunt" terragrunt
+fi
+if command -v aws_completer >/dev/null 2>&1; then
+  complete -C "$(command -v aws_completer)" aws
+fi
+
+(( $+functions[_kubectl] )) && compdef _kubectl k
+(( $+functions[_openstack] )) && compdef _openstack os
+if (( $+functions[_argocd] )); then
+  autoload -Uz _argocd_local
+  compdef _argocd_local argocd
+fi
+
+
+# ─────────────────────────────────────────────
+# ALIASES
+# ─────────────────────────────────────────────
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --icons'
+  alias ll='eza -lahF --icons --color=auto'
+else
+  alias ls='ls --color=auto'
+  alias ll='ls -lahF --color=auto'
+fi
+
+alias ..='cd ..'
+alias ...='cd ../..'
+alias c='clear'
+alias cp='cp -iv'
+alias mv='mv -iv'
+alias mkdir='mkdir -pv'
+alias nano='nano -W'
+alias less='less -FSRXc'
+alias wget='wget -c'
+alias fix_stty='stty sane'
+alias fix_term='printf "\\033c"'
+alias show_options='setopt'
+alias src='reload'
+alias grep='grep --color=auto'
+alias ports='ss -tulpn'
+alias myip='curl -fsS --max-time 5 ifconfig.me'
+
+command -v btop >/dev/null 2>&1 && alias top='btop'
+if command -v batcat >/dev/null 2>&1; then
+  alias cat='batcat --style=plain'
+elif command -v bat >/dev/null 2>&1; then
+  alias cat='bat --style=plain'
+fi
+
+alias salut='topgrade --disable containers -c --yes'
+alias gcl='gitlab-ci-local --home ~/.gitlab-ci-local'
+alias k='kubectl'
+alias kubeseal='kubeseal --cert ~/.kube/sealed-secrets-cert.pem'
+alias ansible-env='source ~/.venv/ansible/bin/activate'
+alias os='openstack'
+
+setK3S() {
+  export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+}
+
+unsetK3S() {
+  export KUBECONFIG="$HOME/.kube/config"
+}
+
+please_last() {
+  local previous_command
+  previous_command="$(fc -ln -1)"
+  [[ -n "$previous_command" ]] && eval "sudo $previous_command"
+}
+
+
+# ─────────────────────────────────────────────
+# FZF AND ZLE PLUGINS
+# ─────────────────────────────────────────────
+export FZF_DEFAULT_OPTS="
+  --height 50%
+  --layout=reverse
+  --border
+  --color='fg:#d0d0d0,bg:#121212,hl:#5f87af'
+  --color='fg+:#d0d0d0,bg+:#262626,hl+:#5fd7ff'
+  --color='info:#afaf87,prompt:#d7005f,pointer:#af5fff'
+  --color='marker:#87ff00,spinner:#af5fff,header:#87afaf'
+"
+
+if [[ -r "$HOME/.fzf.zsh" ]]; then
+  source "$HOME/.fzf.zsh"
+elif command -v fzf >/dev/null 2>&1 && fzf --zsh >/dev/null 2>&1; then
+  source <(fzf --zsh)
+else
+  [[ -r "$HOME/.fzf/shell/completion.zsh" ]] && source "$HOME/.fzf/shell/completion.zsh"
+  [[ -r "$HOME/.fzf/shell/key-bindings.zsh" ]] && source "$HOME/.fzf/shell/key-bindings.zsh"
+fi
+
+FZF_TAB_PLUGIN="$HOME/.local/share/zsh/plugins/fzf-tab/fzf-tab.plugin.zsh"
+if [[ -r "$FZF_TAB_PLUGIN" ]]; then
+  source "$FZF_TAB_PLUGIN"
+  zstyle ':fzf-tab:*' fzf-command fzf
+  zstyle ':fzf-tab:*' fzf-flags --height=50% --layout=reverse --border
+
+  # Tab complète puis parcourt les résultats en ligne, sans menu de sélection.
+  bindkey '^I' expand-or-complete
+  bindkey '^[[Z' reverse-menu-complete
+  if zle -l fzf-tab-complete >/dev/null 2>&1; then
+    bindkey '^@' fzf-tab-complete
+  fi
+fi
+unset FZF_TAB_PLUGIN
+
+AUTOPAIR_PLUGIN="$HOME/.local/share/zsh/plugins/zsh-autopair/autopair.zsh"
+[[ -r "$AUTOPAIR_PLUGIN" ]] && source "$AUTOPAIR_PLUGIN"
+unset AUTOPAIR_PLUGIN
+
+AUTOSUGGEST_PLUGIN="$HOME/.local/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+if [[ -r "$AUTOSUGGEST_PLUGIN" ]]; then
+  ZSH_AUTOSUGGEST_USE_ASYNC=true
+  source "$AUTOSUGGEST_PLUGIN"
+fi
+unset AUTOSUGGEST_PLUGIN
+
+
+# ─────────────────────────────────────────────
+# LOCAL MACHINE CONFIGURATION
+# ─────────────────────────────────────────────
+[[ -r "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
+[[ -r "$HOME/.config/openstack/openrc.sh" ]] && source "$HOME/.config/openstack/openrc.sh"
+
+# Ce plugin doit rester le dernier fichier sourcé pour décorer tous les widgets.
+HIGHLIGHT_PLUGIN="$HOME/.local/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+[[ -r "$HIGHLIGHT_PLUGIN" ]] && source "$HIGHLIGHT_PLUGIN"
+unset HIGHLIGHT_PLUGIN
