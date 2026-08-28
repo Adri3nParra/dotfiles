@@ -1,0 +1,6 @@
+.bashrc
+.bash_func
+.bash_functions.d
+.bash_completion.d
+.zsh_functions
+.config/cloud-profiles/cloud.sh
