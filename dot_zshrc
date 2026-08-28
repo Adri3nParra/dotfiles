@@ -54,6 +54,29 @@ else
   print -u2 -- "Oh My Zsh introuvable : $ZSH/oh-my-zsh.sh"
 fi
 
+# Oh My Zsh encode normalement HOST et PWD à chaque prompt pour informer le
+# terminal de son dossier courant. Ces valeurs ne changent qu'après un `cd` :
+# on garde donc le même signal OSC 7 sans refaire deux substitutions à chaque
+# commande.
+if (( $+functions[omz_termsupport_cwd] && $+functions[omz_urlencode] )); then
+  typeset -g _SHELL_TERM_URL_HOST _SHELL_TERM_URL_PATH
+
+  _shell_termsupport_update_cwd() {
+    _SHELL_TERM_URL_HOST="$(omz_urlencode -P "$HOST")" || return
+    _SHELL_TERM_URL_PATH="$(omz_urlencode -P "$PWD")" || return
+  }
+
+  omz_termsupport_cwd() {
+    local url_host="$_SHELL_TERM_URL_HOST"
+    [[ -z "$KONSOLE_PROFILE_NAME" && -z "$KONSOLE_DBUS_SESSION" ]] || url_host=""
+    printf '\e]7;file://%s%s\e\\' "$url_host" "$_SHELL_TERM_URL_PATH"
+  }
+
+  autoload -Uz add-zsh-hook
+  add-zsh-hook chpwd _shell_termsupport_update_cwd
+  _shell_termsupport_update_cwd
+fi
+
 # Garantit un système de complétion fonctionnel même pendant le bootstrap.
 if (( ! $+functions[compdef] )); then
   autoload -Uz compinit
@@ -130,6 +153,11 @@ history-time() {
 # ─────────────────────────────────────────────
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate zsh)"
+
+  # `hook_env.chpwd_only` rend ce hook precmd inutile. Le retirer évite même
+  # le coût du lancement de mise qui ne ferait alors que sortir immédiatement.
+  autoload -Uz add-zsh-hook
+  add-zsh-hook -d precmd _mise_hook_precmd 2>/dev/null
 fi
 
 if command -v zoxide >/dev/null 2>&1; then
@@ -392,6 +420,9 @@ unset AUTOPAIR_PLUGIN
 AUTOSUGGEST_PLUGIN="$HOME/.local/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
 if [[ -r "$AUTOSUGGEST_PLUGIN" ]]; then
   ZSH_AUTOSUGGEST_USE_ASYNC=true
+  # Tous les widgets sont déjà définis avant le premier prompt : une seule
+  # liaison suffit et évite d'en reparcourir plus de 200 après chaque commande.
+  ZSH_AUTOSUGGEST_MANUAL_REBIND=true
   source "$AUTOSUGGEST_PLUGIN"
 fi
 unset AUTOSUGGEST_PLUGIN

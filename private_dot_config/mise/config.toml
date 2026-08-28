@@ -1,3 +1,8 @@
+[settings.hook_env]
+# L'environnement d'un projet est recalculé uniquement lors d'un changement
+# de dossier. Évite de relancer `mise hook-env` après chaque commande.
+chpwd_only = true
+
 [bootstrap.packages]
 # Paquets de base fournis par le gestionnaire natif sur Debian/Ubuntu.
 "apt:build-essential" = "latest"
