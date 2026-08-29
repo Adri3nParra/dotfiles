@@ -41,7 +41,7 @@ fpath=("$HOME/.zsh_completion.d" $fpath)
 # OH MY ZSH
 # ─────────────────────────────────────────────
 export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME=""
+ZSH_THEME="simple"
 plugins=(git)
 
 zstyle ':omz:update' mode disabled
@@ -172,27 +172,6 @@ fi
 # ─────────────────────────────────────────────
 # PROMPT
 # ─────────────────────────────────────────────
-# Palette et forme identiques au thème minimal d'Oh My Bash.
-ZSH_THEME_GIT_PROMPT_PREFIX='%F{cyan}(%F{green}'
-ZSH_THEME_GIT_PROMPT_SUFFIX='%F{cyan})%f'
-ZSH_THEME_GIT_PROMPT_DIRTY=' %F{yellow}✗'
-ZSH_THEME_GIT_PROMPT_CLEAN=' %F{green}✓'
-
-if (( ! $+functions[git_prompt_info] )); then
-  git_prompt_info() {
-    local branch state
-    branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null ||
-      command git rev-parse --short HEAD 2>/dev/null)" || return
-    [[ -n "$branch" ]] || return
-    if [[ -n "$(command git status --porcelain 2>/dev/null)" ]]; then
-      state='%F{yellow}✗'
-    else
-      state='%F{green}✓'
-    fi
-    print -nr -- "%F{cyan}(%F{green}${branch} ${state}%F{cyan})%f"
-  }
-fi
-
 KUBE_PS1_SCRIPT="$HOME/.local/share/kube-ps1/kube-ps1.sh"
 if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   source "$KUBE_PS1_SCRIPT"
@@ -223,8 +202,9 @@ _shell_kube_prompt() {
   [[ -n "$kube" ]] && print -nr -- " %F{magenta}${kube}%f"
 }
 
-PROMPT='$(git_prompt_info) %F{cyan}%~%f$(_shell_kube_prompt) '
-RPROMPT='%F{8}%D{%H:%M}%f'
+# Le thème `simple` possède le prompt de base ; on lui ajoute seulement
+# l'indicateur Kubernetes lorsqu'un contexte est disponible.
+PROMPT="${PROMPT% }"'$(_shell_kube_prompt) '
 PS2='%F{magenta}%_│%f '
 
 
