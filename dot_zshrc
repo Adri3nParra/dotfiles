@@ -172,6 +172,9 @@ fi
 # ─────────────────────────────────────────────
 # PROMPT
 # ─────────────────────────────────────────────
+# Le `✔` large du thème `simple` chevauche la parenthèse avec certaines polices.
+ZSH_THEME_GIT_PROMPT_CLEAN=" %{$fg[green]%}✓"
+
 KUBE_PS1_SCRIPT="$HOME/.local/share/kube-ps1/kube-ps1.sh"
 if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   source "$KUBE_PS1_SCRIPT"
@@ -185,8 +188,8 @@ if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   KUBE_PS1_SEPARATOR=" "
   KUBE_PS1_NS_ENABLE=true
   KUBE_PS1_SYMBOL_CUSTOM="☸"
-  KUBE_PS1_PREFIX=""
-  KUBE_PS1_SUFFIX=""
+  KUBE_PS1_PREFIX="("
+  KUBE_PS1_SUFFIX=")"
 
   _kube_short_cluster() {
     printf '%s\n' "${1#*@}"
