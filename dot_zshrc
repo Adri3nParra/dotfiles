@@ -188,8 +188,8 @@ if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
   KUBE_PS1_SEPARATOR=" "
   KUBE_PS1_NS_ENABLE=true
   KUBE_PS1_SYMBOL_CUSTOM="☸"
-  KUBE_PS1_PREFIX="("
-  KUBE_PS1_SUFFIX=")"
+  KUBE_PS1_PREFIX=""
+  KUBE_PS1_SUFFIX=""
 
   _kube_short_cluster() {
     printf '%s\n' "${1#*@}"
