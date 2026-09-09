@@ -55,6 +55,7 @@ chpwd_only = true
 "brew:magic-wormhole" = "latest"
 "brew:tree" = "latest"
 "brew:yq" = "latest"
+"brew:skopeo" = "latest"
 
 [bootstrap.repos]
 "~/.oh-my-zsh" = { url = "https://github.com/ohmyzsh/ohmyzsh.git" }

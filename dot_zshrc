@@ -271,6 +271,7 @@ command -v kubecm >/dev/null 2>&1 && _completion_cache kubecm kubecm completion 
 command -v mise >/dev/null 2>&1 && _completion_cache mise mise completion zsh
 command -v kind >/dev/null 2>&1 && _completion_cache kind kind completion zsh
 command -v nerdctl >/dev/null 2>&1 && _completion_cache nerdctl nerdctl completion zsh
+command -v skopeo >/dev/null 2>&1 && _completion_cache skopeo skopeo completion zsh
 
 if command -v register-python-argcomplete >/dev/null 2>&1; then
   command -v ansible >/dev/null 2>&1 &&
