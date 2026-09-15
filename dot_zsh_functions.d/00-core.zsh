@@ -150,6 +150,17 @@ helpz() {
   esac
 }
 
+_helpz_widget() {
+  zle -I
+  helpz
+  zle reset-prompt
+}
+
+if [[ -o interactive ]]; then
+  zle -N _helpz_widget
+  bindkey '^X^A' _helpz_widget
+fi
+
 # ─────────────────────────────────────────────
 # KUBERNETES
 # ─────────────────────────────────────────────
