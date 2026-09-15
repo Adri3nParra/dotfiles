@@ -44,6 +44,7 @@ chpwd_only = true
 "brew:fzf" = "latest"
 "brew:ripgrep" = "latest"
 "brew:kubernetes-cli" = "latest"
+"brew:kind" = "latest"
 "brew:kubectx" = "latest"
 "brew:kubecm" = "latest"
 "brew:helm" = "latest"
