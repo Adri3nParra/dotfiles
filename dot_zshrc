@@ -216,6 +216,9 @@ _shell_kube_prompt() {
 # l'indicateur Kubernetes lorsqu'un contexte est disponible.
 PROMPT="${PROMPT% }"'$(_shell_kube_prompt) '
 PS2='%F{magenta}%_│%f '
+# Ne pas afficher le `%` de fin de ligne après une commande interrompue dont
+# la sortie ne se termine pas par un retour à la ligne.
+PROMPT_EOL_MARK=''
 
 
 # ─────────────────────────────────────────────
