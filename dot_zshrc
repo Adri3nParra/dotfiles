@@ -93,7 +93,9 @@ setopt AUTO_PUSHD
 setopt PUSHD_IGNORE_DUPS
 setopt PUSHD_SILENT
 setopt CD_SILENT
-setopt CORRECT
+# La correction des noms de commandes affiche une confirmation `[nyae]` à
+# chaque faute de frappe (par exemple `kubecyx` → `kubectx`).
+unsetopt CORRECT
 setopt INTERACTIVE_COMMENTS
 setopt PROMPT_SUBST
 setopt AUTO_MENU
@@ -195,6 +197,11 @@ if [[ -r "$KUBE_PS1_SCRIPT" ]]; then
     printf '%s\n' "${1#*@}"
   }
   KUBE_PS1_CLUSTER_FUNCTION=_kube_short_cluster
+
+  _kube_effective_namespace() {
+    [[ "$1" == "N/A" ]] && printf 'default\n' || printf '%s\n' "$1"
+  }
+  KUBE_PS1_NAMESPACE_FUNCTION=_kube_effective_namespace
 fi
 unset KUBE_PS1_SCRIPT
 
@@ -293,6 +300,11 @@ if [[ -x "$HOME/.terragrunt/bin/terragrunt" ]]; then
 fi
 if command -v aws_completer >/dev/null 2>&1; then
   complete -C "$(command -v aws_completer)" aws
+fi
+if command -v tofu >/dev/null 2>&1; then
+  # OpenTofu expose sa complétion via l'interface Bash `-C`, comme Terraform.
+  # Résoudre le chemin au démarrage évite de le figer lors d'une mise à jour.
+  complete -o nospace -C "$(command -v tofu)" tofu
 fi
 
 (( $+functions[_kubectl] )) && compdef _kubectl k
