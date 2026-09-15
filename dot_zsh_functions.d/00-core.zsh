@@ -91,6 +91,65 @@ reminder() {
 
 myhelp() { reminder "$@"; }
 
+helpz() {
+  local query="$*" name value source selected kind usage detail
+  local -a entries help_parts
+
+  # `aliases` contient les alias personnels et ceux des plugins Oh My Zsh.
+  for name in ${(ok)aliases}; do
+    value="${aliases[$name]//$'\t'/ }"
+    value="${value//$'\n'/ }"
+    entries+=("alias"$'\t'"$name"$'\t'"$value"$'\t')
+  done
+
+  # Ne garder que les fonctions publiques provenant de la configuration perso.
+  zmodload zsh/parameter 2>/dev/null
+  for name in ${(ok)functions_source}; do
+    [[ "$name" == _* ]] && continue
+    source="${functions_source[$name]}"
+    [[ "$source" == */.zsh_functions.d/*.zsh ||
+       "$source" == */cloud-profiles/cloud.zsh ]] || continue
+
+    help_parts=("${(@f)$(
+      functions "$name" 2>/dev/null |
+        sed -n '/_usage/ {p;q;}' |
+        command grep -o '"[^"]*"'
+    )}")
+    detail="${help_parts[4]:-fonction personnelle}"
+    detail="${detail#\"}"; detail="${detail%\"}"
+    usage="${help_parts[5]:-$name}"
+    usage="${usage#\"}"; usage="${usage%\"}"
+    entries+=("fonction"$'\t'"$name"$'\t'"$usage"$'\t'"$detail")
+  done
+
+  if ! command -v fzf >/dev/null 2>&1; then
+    if [[ -n "$query" ]]; then
+      printf '%s\n' "${entries[@]}" | command grep -iF -- "$query"
+    else
+      printf '%s\n' "${entries[@]}"
+    fi
+    return
+  fi
+
+  selected="$(
+    printf '%s\n' "${entries[@]}" |
+      fzf --delimiter=$'\t' --with-nth=1,2,3,4 \
+        --height=70% --layout=reverse --border \
+        --prompt='helpz > ' --query="$query" \
+        --header=$'TYPE\tNOM\tUTILISATION\tDESCRIPTION — Entrée pour afficher'
+  )" || return 0
+
+  IFS=$'\t' read -r kind name usage detail <<< "$selected"
+  case "$kind" in
+    alias)
+      printf '\n\e[36m%s\e[0m est un alias de :\n  %s\n\n' "$name" "$usage"
+      ;;
+    fonction)
+      printf '\n\e[36m%s\e[0m — %s\nUsage : %s\n\n' "$name" "$detail" "$usage"
+      ;;
+  esac
+}
+
 # ─────────────────────────────────────────────
 # KUBERNETES
 # ─────────────────────────────────────────────
