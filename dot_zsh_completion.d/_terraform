@@ -1,0 +1,482 @@
+#compdef terraform tofu
+
+# Terraform et OpenTofu n'exposent qu'un completer Bash (`complete -C`) qui se
+# limite aux sous-commandes : il renvoie une liste vide dès que le mot courant
+# commence par `-`, donc aucune option (`-var`, `-target`, `-var-file`, ...)
+# n'est jamais proposée. Cette fonction reconstruit la complétion côté Zsh.
+
+# Exécute le binaire courant en conservant le `-chdir=` éventuellement saisi.
+_terraform_run() {
+  local -a cmd
+  cmd=("${_terraform_bin:-terraform}")
+  [[ -n "$_terraform_chdir" ]] && cmd+=("-chdir=$_terraform_chdir")
+  command "${cmd[@]}" "$@" 2>/dev/null
+}
+
+# Répertoire de travail effectif, pour les globs locaux.
+_terraform_dir() {
+  print -r -- "${_terraform_chdir:-.}"
+}
+
+_terraform_varfiles() {
+  _files -g '*.tfvars(-.)' -g '*.tfvars.json(-.)' || _files
+}
+
+# Noms des variables déclarées dans la configuration, suffixés par `=`.
+_terraform_variables() {
+  local dir="$(_terraform_dir)"
+  local -a files vars
+  files=("$dir"/*.tf(N) "$dir"/*/*.tf(N) "$dir"/*.tf.json(N))
+  (( ${#files[@]} )) || return 1
+
+  vars=("${(@f)$(sed -nE 's/^[[:space:]]*variable[[:space:]]+"([^"]+)".*/\1/p' -- "${files[@]}" 2>/dev/null | sort -u)}")
+  vars=("${(@)vars:#}")
+  (( ${#vars[@]} )) || return 1
+
+  # `-var` attend `nom=valeur` : on laisse le curseur juste après le `=`.
+  compadd -S '=' -- "${(@)vars}"
+}
+
+# Adresses de ressources présentes dans l'état, pour `-target` et `-replace`.
+_terraform_addresses() {
+  local -a addresses
+  addresses=("${(@f)$(_terraform_run state list)}")
+  addresses=("${(@)addresses:#}")
+  (( ${#addresses[@]} )) || return 1
+  _describe -t addresses 'adresse de ressource' addresses
+}
+
+_terraform_workspaces() {
+  local -a workspaces
+  workspaces=("${(@f)$(_terraform_run workspace list | sed -e 's/^[*[:space:]]*//' -e '/^$/d')}")
+  (( ${#workspaces[@]} )) || return 1
+  _describe -t workspaces 'workspace' workspaces
+}
+
+_terraform_outputs() {
+  local -a outputs
+  outputs=("${(@f)$(_terraform_run output -json 2>/dev/null | sed -nE 's/^[[:space:]]*"([^"]+)":[[:space:]]*\{.*/\1/p')}")
+  (( ${#outputs[@]} )) || return 1
+  _describe -t outputs 'output' outputs
+}
+
+_terraform_statefiles() {
+  _files -g '*.tfstate*(-.)' || _files
+}
+
+# Complète la forme attachée `-option=valeur`, que `_arguments` ne gère pas
+# pour les options à simple tiret utilisées par Terraform.
+_terraform_attached_value() {
+  local option="${PREFIX%%=*}"
+
+  [[ "$PREFIX" == -*=* ]] || return 1
+  compset -P '*='
+
+  case "$option" in
+    -var) _terraform_variables ;;
+    -var-file) _terraform_varfiles ;;
+    -target|-replace|-exclude) _terraform_addresses ;;
+    -state|-state-out|-backup) _terraform_statefiles ;;
+    -out|-generate-config-out|-plugin-dir|-from-module|-backend-config|-test-directory|-config)
+      _files ;;
+    -chdir) _directories ;;
+    -input|-lock|-refresh|-get|-backend|-write|-list|-upgrade|-verify|-refresh-only)
+      _values 'valeur' true false ;;
+    -lockfile) _values 'mode' readonly ;;
+    -deprecation) _values 'mode' none local module all ;;
+    -parallelism|-lock-timeout|-net-mtls-*) _message 'valeur' ;;
+    *) _default ;;
+  esac
+  return 0
+}
+
+_terraform() {
+  local curcontext="$curcontext" state line ret=1
+  local _terraform_bin="${words[1]}" _terraform_chdir=''
+  local -a global_opts common_opts apply_opts plan_opts var_opts
+
+  # `-chdir=` précède la sous-commande et change le répertoire de référence.
+  local word
+  for word in "${words[@]}"; do
+    [[ "$word" == -chdir=* ]] && _terraform_chdir="${word#-chdir=}"
+  done
+
+  _terraform_attached_value && return 0
+
+  var_opts=(
+    '*-var[definit une variable d'\''entree (nom=valeur)]:variable:_terraform_variables'
+    '*-var-file[charge les variables depuis un fichier]:fichier:_terraform_varfiles'
+  )
+
+  common_opts=(
+    '-no-color[desactive la sortie couleur]'
+    '-compact-warnings[affiche les avertissements en version courte]'
+    '-consolidate-warnings[regroupe les avertissements similaires]'
+    '-consolidate-errors[regroupe les erreurs similaires]'
+  )
+
+  plan_opts=(
+    "${common_opts[@]}"
+    "${var_opts[@]}"
+    '-destroy[planifie la destruction de toutes les ressources]'
+    '-refresh-only[planifie uniquement la mise a jour de l'\''etat]'
+    '-refresh=-[rafraichit l'\''etat avant le plan]:valeur:(true false)'
+    '*-target=-[limite l'\''operation a une adresse de ressource]:adresse:_terraform_addresses'
+    '*-replace=-[force le remplacement d'\''une ressource]:adresse:_terraform_addresses'
+    '*-exclude=-[exclut une adresse de ressource de l'\''operation]:adresse:_terraform_addresses'
+    '-input=-[autorise les invites interactives]:valeur:(true false)'
+    '-lock=-[verrouille l'\''etat pendant l'\''operation]:valeur:(true false)'
+    '-lock-timeout=-[duree d'\''attente du verrou]:duree:(0s 30s 1m 5m)'
+    '-parallelism=-[nombre d'\''operations concurrentes]:nombre:(1 5 10 20 50)'
+    '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles'
+    '-json[sortie au format JSON]'
+    '-concise[masque le journal de rafraichissement]'
+  )
+
+  apply_opts=(
+    "${plan_opts[@]}"
+    '-auto-approve[applique sans demander de confirmation]'
+    '-backup=-[chemin de la sauvegarde de l'\''etat]:fichier:_terraform_statefiles'
+    '-state-out=-[chemin d'\''ecriture de l'\''etat]:fichier:_terraform_statefiles'
+  )
+
+  global_opts=(
+    '-chdir=-[change de repertoire de travail avant la sous-commande]:repertoire:_directories'
+    '-help[affiche l'\''aide]'
+    '-version[affiche la version]'
+  )
+
+  _arguments -C \
+    "${global_opts[@]}" \
+    '1: :->command' \
+    '*:: :->argument' && ret=0
+
+  case "$state" in
+    command)
+      local -a commands
+      commands=(
+        'init:prepare le repertoire de travail'
+        'validate:verifie la validite de la configuration'
+        'plan:affiche les changements a appliquer'
+        'apply:cree ou met a jour l'\''infrastructure'
+        'destroy:detruit l'\''infrastructure existante'
+        'console:ouvre une console d'\''expressions'
+        'fmt:reformate la configuration'
+        'force-unlock:libere un verrou bloque'
+        'get:installe ou met a jour les modules'
+        'graph:genere un graphe Graphviz'
+        'import:associe une ressource existante a l'\''etat'
+        'login:enregistre des identifiants distants'
+        'logout:supprime des identifiants distants'
+        'metadata:commandes liees aux metadonnees'
+        'output:affiche les valeurs de sortie'
+        'providers:affiche les providers requis'
+        'refresh:met a jour l'\''etat depuis les systemes distants'
+        'show:affiche un etat ou un plan'
+        'state:gestion avancee de l'\''etat'
+        'taint:marque une ressource comme degradee'
+        'test:execute les tests d'\''integration'
+        'untaint:retire la marque de degradation'
+        'version:affiche la version'
+        'workspace:gestion des workspaces'
+      )
+      _describe -t commands 'commande' commands && ret=0
+      ;;
+
+    argument)
+      curcontext="${curcontext%:*:*}:terraform-${words[1]}:"
+      case "${words[1]}" in
+        plan)
+          _arguments -s \
+            "${plan_opts[@]}" \
+            '-detailed-exitcode[renvoie un code de sortie detaille]' \
+            '-generate-config-out=-[genere la configuration des ressources importees]:fichier:_files' \
+            '-out=-[enregistre le plan dans un fichier]:fichier:_files' \
+            '-show-sensitive[affiche les valeurs sensibles]' && ret=0
+          ;;
+        apply)
+          _arguments -s \
+            "${apply_opts[@]}" \
+            '-show-sensitive[affiche les valeurs sensibles]' \
+            '*:plan enregistre:_files' && ret=0
+          ;;
+        destroy)
+          _arguments -s "${apply_opts[@]}" && ret=0
+          ;;
+        refresh)
+          _arguments -s "${apply_opts[@]}" && ret=0
+          ;;
+        init)
+          _arguments -s \
+            "${common_opts[@]}" \
+            "${var_opts[@]}" \
+            '-backend=-[active la configuration du backend]:valeur:(true false)' \
+            '*-backend-config=-[fichier ou paire cle=valeur de backend]:configuration:_files' \
+            '-force-copy[copie l'\''etat sans confirmation lors d'\''une migration]' \
+            '-from-module=-[initialise depuis un module distant]:source:_files' \
+            '-get=-[telecharge les modules]:valeur:(true false)' \
+            '-input=-[autorise les invites interactives]:valeur:(true false)' \
+            '-lock=-[verrouille l'\''etat]:valeur:(true false)' \
+            '-lock-timeout=-[duree d'\''attente du verrou]:duree:(0s 30s 1m)' \
+            '-plugin-dir=-[repertoire de plugins local]:repertoire:_directories' \
+            '-reconfigure[reconfigure le backend en ignorant l'\''etat existant]' \
+            '-migrate-state[migre l'\''etat vers le nouveau backend]' \
+            '-upgrade[met a jour modules et providers]' \
+            '-lockfile=-[mode du fichier de verrouillage]:mode:(readonly)' \
+            '-ignore-remote-version[ignore la verification de version distante]' \
+            '-json[sortie au format JSON]' \
+            '-test-directory=-[repertoire des tests]:repertoire:_directories' \
+            '*:repertoire:_directories' && ret=0
+          ;;
+        validate)
+          _arguments -s \
+            "${common_opts[@]}" \
+            "${var_opts[@]}" \
+            '-json[sortie au format JSON]' \
+            '-test-directory=-[repertoire des tests]:repertoire:_directories' \
+            '*:repertoire:_directories' && ret=0
+          ;;
+        fmt)
+          _arguments -s \
+            '-list=-[liste les fichiers modifies]:valeur:(true false)' \
+            '-write=-[ecrit les modifications sur disque]:valeur:(true false)' \
+            '-diff[affiche les differences]' \
+            '-check[echoue si un fichier n'\''est pas formate]' \
+            '-no-color[desactive la sortie couleur]' \
+            '-recursive[traite les sous-repertoires]' \
+            '*:repertoire:_directories' && ret=0
+          ;;
+        show)
+          _arguments -s \
+            '-json[sortie au format JSON]' \
+            '-no-color[desactive la sortie couleur]' \
+            '-show-sensitive[affiche les valeurs sensibles]' \
+            '1:plan ou etat:_files' && ret=0
+          ;;
+        output)
+          _arguments -s \
+            '-json[sortie au format JSON]' \
+            '-raw[affiche la valeur brute]' \
+            '-no-color[desactive la sortie couleur]' \
+            '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles' \
+            '-show-sensitive[affiche les valeurs sensibles]' \
+            '1:output:_terraform_outputs' && ret=0
+          ;;
+        console)
+          _arguments -s \
+            "${var_opts[@]}" \
+            '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles' \
+            '-plan[evalue les expressions sur un plan]' && ret=0
+          ;;
+        graph)
+          _arguments -s \
+            '-plan=-[graphe issu d'\''un plan enregistre]:fichier:_files' \
+            '-draw-cycles[met en evidence les cycles]' \
+            '-type=-[type de graphe]:type:(plan plan-refresh-only plan-destroy apply validate)' \
+            '-module-depth=-[profondeur des modules]:profondeur:' && ret=0
+          ;;
+        import)
+          _arguments -s \
+            "${var_opts[@]}" \
+            '-config=-[repertoire de configuration]:repertoire:_directories' \
+            '-input=-[autorise les invites interactives]:valeur:(true false)' \
+            '-lock=-[verrouille l'\''etat]:valeur:(true false)' \
+            '-lock-timeout=-[duree d'\''attente du verrou]:duree:(0s 30s 1m)' \
+            '-no-color[desactive la sortie couleur]' \
+            '-parallelism=-[nombre d'\''operations concurrentes]:nombre:' \
+            '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles' \
+            '-ignore-remote-version[ignore la verification de version distante]' \
+            '1:adresse:_terraform_addresses' \
+            '2:identifiant:' && ret=0
+          ;;
+        taint|untaint)
+          _arguments -s \
+            '-allow-missing[reussit meme si la ressource est absente]' \
+            '-lock=-[verrouille l'\''etat]:valeur:(true false)' \
+            '-lock-timeout=-[duree d'\''attente du verrou]:duree:(0s 30s 1m)' \
+            '-ignore-remote-version[ignore la verification de version distante]' \
+            '1:adresse:_terraform_addresses' && ret=0
+          ;;
+        force-unlock)
+          _arguments -s \
+            '-force[ne demande pas de confirmation]' \
+            '1:identifiant de verrou:' && ret=0
+          ;;
+        test)
+          _arguments -s \
+            "${var_opts[@]}" \
+            '-filter=-[limite l'\''execution a un fichier de test]:fichier:_files -g "*.tftest.hcl(-.)"' \
+            '-json[sortie au format JSON]' \
+            '-no-color[desactive la sortie couleur]' \
+            '-test-directory=-[repertoire des tests]:repertoire:_directories' \
+            '-verbose[affiche le detail de chaque execution]' && ret=0
+          ;;
+        get)
+          _arguments -s \
+            '-update[met a jour les modules deja installes]' \
+            '-no-color[desactive la sortie couleur]' \
+            '*:repertoire:_directories' && ret=0
+          ;;
+        workspace)
+          _terraform_workspace_command && ret=0
+          ;;
+        state)
+          _terraform_state_command && ret=0
+          ;;
+        providers)
+          _terraform_providers_command && ret=0
+          ;;
+        *)
+          _arguments -s "${common_opts[@]}" '*:argument:_files' && ret=0
+          ;;
+      esac
+      ;;
+  esac
+
+  return ret
+}
+
+_terraform_workspace_command() {
+  local state
+  _arguments -C '1: :->subcommand' '*:: :->argument' && return 0
+
+  case "$state" in
+    subcommand)
+      local -a subcommands
+      subcommands=(
+        'delete:supprime un workspace'
+        'list:liste les workspaces'
+        'new:cree un workspace'
+        'select:bascule vers un workspace'
+        'show:affiche le workspace courant'
+      )
+      _describe -t subcommands 'sous-commande workspace' subcommands
+      ;;
+    argument)
+      case "${words[1]}" in
+        delete)
+          _arguments -s \
+            '-force[supprime meme si des ressources subsistent]' \
+            '-lock=-[verrouille l'\''etat]:valeur:(true false)' \
+            '1:workspace:_terraform_workspaces'
+          ;;
+        select)
+          _arguments -s \
+            '-or-create=-[cree le workspace s'\''il n'\''existe pas]:valeur:(true false)' \
+            '1:workspace:_terraform_workspaces'
+          ;;
+        new)
+          _arguments -s \
+            '-lock=-[verrouille l'\''etat]:valeur:(true false)' \
+            '-state=-[etat a importer dans le workspace]:fichier:_terraform_statefiles' \
+            '1:nom du workspace:'
+          ;;
+        *) _default ;;
+      esac
+      ;;
+  esac
+}
+
+_terraform_state_command() {
+  local state
+  _arguments -C '1: :->subcommand' '*:: :->argument' && return 0
+
+  case "$state" in
+    subcommand)
+      local -a subcommands
+      subcommands=(
+        'list:liste les ressources de l'\''etat'
+        'mv:deplace une ressource dans l'\''etat'
+        'pull:telecharge et affiche l'\''etat distant'
+        'push:envoie un etat local vers le backend'
+        'replace-provider:remplace un provider dans l'\''etat'
+        'rm:supprime des ressources de l'\''etat'
+        'show:affiche une ressource de l'\''etat'
+      )
+      _describe -t subcommands 'sous-commande state' subcommands
+      ;;
+    argument)
+      local -a state_opts
+      state_opts=(
+        '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles'
+        '-backup=-[chemin de la sauvegarde de l'\''etat]:fichier:_terraform_statefiles'
+        '-lock=-[verrouille l'\''etat]:valeur:(true false)'
+        '-lock-timeout=-[duree d'\''attente du verrou]:duree:(0s 30s 1m)'
+      )
+      case "${words[1]}" in
+        list)
+          _arguments -s \
+            '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles' \
+            '-id=-[filtre par identifiant de ressource]:identifiant:' \
+            '*:adresse:_terraform_addresses'
+          ;;
+        show)
+          _arguments -s \
+            '-state=-[chemin du fichier d'\''etat]:fichier:_terraform_statefiles' \
+            '1:adresse:_terraform_addresses'
+          ;;
+        mv)
+          _arguments -s \
+            "${state_opts[@]}" \
+            '-state-out=-[etat de destination]:fichier:_terraform_statefiles' \
+            '-dry-run[simule le deplacement]' \
+            '1:source:_terraform_addresses' \
+            '2:destination:'
+          ;;
+        rm)
+          _arguments -s \
+            "${state_opts[@]}" \
+            '-dry-run[simule la suppression]' \
+            '*:adresse:_terraform_addresses'
+          ;;
+        push)
+          _arguments -s '-force[ignore les verifications de securite]' '1:fichier d'\''etat:_terraform_statefiles'
+          ;;
+        pull) _message 'aucune option' ;;
+        replace-provider)
+          _arguments -s "${state_opts[@]}" '-auto-approve[remplace sans confirmation]' '1:provider source:' '2:provider cible:'
+          ;;
+        *) _default ;;
+      esac
+      ;;
+  esac
+}
+
+_terraform_providers_command() {
+  local state
+  _arguments -C '1: :->subcommand' '*:: :->argument' && return 0
+
+  case "$state" in
+    subcommand)
+      local -a subcommands
+      subcommands=(
+        'lock:met a jour le fichier de verrouillage des dependances'
+        'mirror:copie les providers dans un miroir local'
+        'schema:affiche les schemas des providers'
+      )
+      _describe -t subcommands 'sous-commande providers' subcommands
+      ;;
+    argument)
+      case "${words[1]}" in
+        lock)
+          _arguments -s \
+            '*-platform=-[plateforme cible]:plateforme:(linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64)' \
+            '-fs-mirror=-[miroir sur disque]:repertoire:_directories' \
+            '-net-mirror=-[miroir reseau]:url:' \
+            '-enable-plugin-cache[utilise le cache de plugins]'
+          ;;
+        mirror)
+          _arguments -s \
+            '*-platform=-[plateforme cible]:plateforme:(linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64)' \
+            '1:repertoire:_directories'
+          ;;
+        schema)
+          _arguments -s '-json[sortie au format JSON]'
+          ;;
+        *) _default ;;
+      esac
+      ;;
+  esac
+}
+
+_terraform "$@"

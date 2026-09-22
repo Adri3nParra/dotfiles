@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────
+# ZSHENV — sourcé par TOUS les shells zsh
+# ─────────────────────────────────────────────
+# Garder ce fichier minimal : il s'exécute aussi pour chaque script zsh
+# non interactif.
+
+# `/etc/zsh/zshrc` (paquet Ubuntu) lance un `compinit` sans `-d` avant même que
+# `~/.zshrc` ne soit lu. Il scrute tout le `fpath`, écrit un second dump dans
+# `~/.zcompdump` et lance `compaudit`, alors qu'Oh My Zsh refait exactement ce
+# travail quelques lignes plus loin. Le fichier système documente lui-même
+# cette variable comme moyen de s'en passer.
+skip_global_compinit=1

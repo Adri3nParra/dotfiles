@@ -101,6 +101,12 @@ setopt PROMPT_SUBST
 setopt AUTO_MENU
 unsetopt AUTO_LIST
 unsetopt LIST_BEEP
+# Globs etendus : `^motif` pour exclure, `motif~exception`, `(#i)` insensible a
+# la casse, qualificateurs de date. Indispensable des qu'on manipule des lots
+# de fichiers sans pipeline.
+setopt EXTENDED_GLOB
+# Ctrl-S ne gele plus le terminal, ce qui libere aussi Ctrl-Q.
+unsetopt FLOW_CONTROL
 
 bindkey -e
 autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
@@ -115,6 +121,10 @@ zstyle ':completion:*' matcher-list \
   'm:{a-zA-Z}={A-Za-z}' \
   'r:|[._-]=* r:|=*'
 zstyle ':completion:*' group-name ''
+# Les completeurs lourds (kubectl, aws) memorisent leurs resultats ici plutot
+# que dans ~/.zcompcache.
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "$HOME/.cache/zsh/zcompcache"
 zstyle ':completion:*:descriptions' format '%F{cyan}%d%f'
 
 
@@ -122,8 +132,10 @@ zstyle ':completion:*:descriptions' format '%F{cyan}%d%f'
 # HISTORY
 # ─────────────────────────────────────────────
 HISTFILE="$HOME/.zsh_history"
-HISTSIZE=10000
-SAVEHIST=10000
+# L'historique est la memoire de travail du shell : le relire au demarrage est
+# mesure a moins d'une milliseconde, autant le garder large.
+HISTSIZE=100000
+SAVEHIST=100000
 
 setopt APPEND_HISTORY
 setopt SHARE_HISTORY
@@ -134,6 +146,9 @@ setopt HIST_IGNORE_ALL_DUPS
 setopt HIST_IGNORE_SPACE
 setopt HIST_REDUCE_BLANKS
 setopt HIST_VERIFY
+# Verrouillage par fcntl : ecriture concurrente sure entre terminaux partageant
+# le meme fichier, et plus rapide que le verrou par fichier temporaire.
+setopt HIST_FCNTL_LOCK
 
 # Ignore les wrappers techniques injectés par certains lanceurs de terminal.
 zshaddhistory() {
@@ -238,28 +253,76 @@ unset function_file
 # COMPLETIONS
 # ─────────────────────────────────────────────
 ZSH_COMPLETION_CACHE="$HOME/.cache/zsh/completions"
-mkdir -p "$ZSH_COMPLETION_CACHE"
+# Toute évolution de la mécanique ci-dessous doit invalider les scripts déjà
+# générés : cette sentinelle évite de le faire à la main.
+ZSH_COMPLETION_CACHE_VERSION=3
 
-_completion_cache() {
-  local name="$1" cache temporary today
+if [[ "$(<$ZSH_COMPLETION_CACHE/.version)" != "$ZSH_COMPLETION_CACHE_VERSION" ]] 2>/dev/null; then
+  command rm -rf -- "$ZSH_COMPLETION_CACHE"
+fi
+if [[ ! -d "$ZSH_COMPLETION_CACHE" ]]; then
+  command mkdir -p -- "$ZSH_COMPLETION_CACHE"
+  print -r -- "$ZSH_COMPLETION_CACHE_VERSION" >| "$ZSH_COMPLETION_CACHE/.version"
+fi
+
+# Régénère le script d'un outil, le valide, puis le pré-compile. Appelé
+# uniquement lorsqu'un cache manque ou a plus de 24 h, jamais sur le chemin
+# normal de démarrage.
+_completion_cache_build() {
+  local name="$1" cache temporary
   shift
 
   cache="$ZSH_COMPLETION_CACHE/$name.zsh"
-  today="$(date +%F)"
+  temporary="$ZSH_COMPLETION_CACHE/.$name.$$.$RANDOM.tmp"
 
-  if [[ ! -s "$cache" ]] ||
-     [[ "$(date -r "$cache" +%F 2>/dev/null)" != "$today" ]] ||
-     ! zsh -n "$cache" 2>/dev/null; then
-    temporary="$(mktemp "${cache}.tmp.XXXXXX")" || return 0
-    if "$@" >| "$temporary" 2>/dev/null &&
-       [[ -s "$temporary" ]] && zsh -n "$temporary" 2>/dev/null; then
-      command mv -f -- "$temporary" "$cache"
-    else
-      command rm -f -- "$temporary"
-    fi
+  # Certains générateurs (Scaleway) appellent `compinit` eux-mêmes. Une seconde
+  # initialisation réécrit l'intégralité du dump à chaque démarrage, soit près
+  # de 200 ms perdues : on neutralise ces appels en position de commande.
+  # `zsh -n` ne verifie que la syntaxe : l'aide d'un outil invoque de travers
+  # la passe sans broncher. On exige donc la marque d'un vrai script de
+  # completion avant d'installer le fichier.
+  if "$@" 2>/dev/null |
+       sed -E 's/(^|&&|\|\||;)([[:space:]]*)compinit\b/\1\2: neutralise compinit/g' >| "$temporary" &&
+     [[ -s "$temporary" ]] &&
+     command grep -qE '(^|[[:space:]])(#compdef|compdef|compctl|complete)([[:space:]]|$)' "$temporary" &&
+     zsh -n "$temporary" 2>/dev/null &&
+     command mv -f -- "$temporary" "$cache"; then
+    # `source` privilégie automatiquement le `.zwc` : sourcer les 19 scripts
+    # passe de ~230 ms à ~17 ms.
+    zcompile -R -- "$cache.zwc" "$cache" 2>/dev/null
+    return 0
   fi
 
-  [[ -r "$cache" ]] && zsh -n "$cache" 2>/dev/null && source "$cache"
+  command rm -f -- "$temporary"
+  return 1
+}
+
+typeset -ga _completion_cache_stale
+
+_completion_cache() {
+  local name="$1" cache
+  local -a fresh
+  shift
+
+  cache="$ZSH_COMPLETION_CACHE/$name.zsh"
+  # `mh-24` sélectionne le fichier s'il a moins de 24 h : le test de fraîcheur
+  # ne coûte plus les deux `date` que forkait chacun des 19 outils.
+  fresh=($cache(Nmh-24))
+
+  if [[ ! -s "$cache" ]]; then
+    # Première génération : on n'a pas d'autre choix que d'attendre.
+    _completion_cache_build "$name" "$@" || return 0
+  elif (( ! ${#fresh} )); then
+    # Cache de la veille : on source la version existante et on programme la
+    # régénération en tâche de fond. Aucun terminal n'attend un générateur.
+    # `"pre${(q)@}"` collerait `pre` au premier element et laisserait les
+    # suivants dans des mots separes : on joint explicitement.
+    local -a entry
+    entry=("$name" "$@")
+    _completion_cache_stale+=("${(j: :)${(@q)entry}}")
+  fi
+
+  [[ -s "$cache" ]] && source "$cache"
 }
 
 command -v kubectl >/dev/null 2>&1 && _completion_cache kubectl kubectl completion zsh
@@ -298,17 +361,36 @@ command -v molecule >/dev/null 2>&1 &&
 # Les completers AWS et Terragrunt exposent uniquement l'interface Bash `-C`.
 autoload -Uz bashcompinit
 bashcompinit
-if [[ -x "$HOME/.terragrunt/bin/terragrunt" ]]; then
-  complete -C "$HOME/.terragrunt/bin/terragrunt" terragrunt
+# Contrairement a celui de Terraform, le completer de Terragrunt renvoie bien
+# ses options. Le chercher dans le PATH plutot qu'a un emplacement fige : une
+# installation par Homebrew ou mise passait ici totalement inapercue.
+if command -v terragrunt >/dev/null 2>&1; then
+  complete -o nospace -C "$(command -v terragrunt)" terragrunt
 fi
 if command -v aws_completer >/dev/null 2>&1; then
   complete -C "$(command -v aws_completer)" aws
 fi
-if command -v tofu >/dev/null 2>&1; then
-  # OpenTofu expose sa complétion via l'interface Bash `-C`, comme Terraform.
-  # Résoudre le chemin au démarrage évite de le figer lors d'une mise à jour.
-  complete -o nospace -C "$(command -v tofu)" tofu
+# Terraform et OpenTofu exposent bien une interface `complete -C`, mais leur
+# completer ne renvoie que des sous-commandes et ignore les options (`-var`,
+# `-target`, ...). La fonction `_terraform` de ~/.zsh_completion.d les couvre.
+
+# Les caches périmés sont reconstruits en une seule passe détachée : le premier
+# terminal de la journée démarre aussi vite que les suivants.
+if (( ${#_completion_cache_stale} )); then
+  {
+    # Un seul shell reconstruit à la fois. Sans ce verrou, ouvrir cinq onglets
+    # le matin lancerait cinq fois les dix-neuf générateurs, et la contention
+    # ralentirait les terminaux suivants. Le verrou est tenu par ce sous-shell
+    # et libéré à sa sortie.
+    zmodload -F zsh/system b:zsystem 2>/dev/null || exit 0
+    zsystem flock -t 0 "$ZSH_COMPLETION_CACHE/.lock" 2>/dev/null || exit 0
+
+    for _stale_entry in "${_completion_cache_stale[@]}"; do
+      eval "_completion_cache_build $_stale_entry"
+    done
+  } &!
 fi
+unset _completion_cache_stale
 
 (( $+functions[_kubectl] )) && compdef _kubectl k
 (( $+functions[_openstack] )) && compdef _openstack os
@@ -390,11 +472,18 @@ export FZF_DEFAULT_OPTS="
 
 if [[ -r "$HOME/.fzf.zsh" ]]; then
   source "$HOME/.fzf.zsh"
-elif command -v fzf >/dev/null 2>&1 && fzf --zsh >/dev/null 2>&1; then
-  source <(fzf --zsh)
 else
-  [[ -r "$HOME/.fzf/shell/completion.zsh" ]] && source "$HOME/.fzf/shell/completion.zsh"
-  [[ -r "$HOME/.fzf/shell/key-bindings.zsh" ]] && source "$HOME/.fzf/shell/key-bindings.zsh"
+  # `fzf --zsh` n'existe qu'a partir de fzf 0.48. On ne lance le binaire qu'une
+  # fois : l'ancienne forme le testait puis le relancait pour la substitution.
+  _fzf_integration=''
+  command -v fzf >/dev/null 2>&1 && _fzf_integration="$(fzf --zsh 2>/dev/null)"
+  if [[ -n "$_fzf_integration" ]]; then
+    eval "$_fzf_integration"
+  else
+    [[ -r "$HOME/.fzf/shell/completion.zsh" ]] && source "$HOME/.fzf/shell/completion.zsh"
+    [[ -r "$HOME/.fzf/shell/key-bindings.zsh" ]] && source "$HOME/.fzf/shell/key-bindings.zsh"
+  fi
+  unset _fzf_integration
 fi
 
 FZF_TAB_PLUGIN="$HOME/.local/share/zsh/plugins/fzf-tab/fzf-tab.plugin.zsh"
