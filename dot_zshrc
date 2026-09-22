@@ -42,7 +42,7 @@ fpath=("$HOME/.zsh_completion.d" $fpath)
 # ─────────────────────────────────────────────
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="simple"
-plugins=(git aliases git-commit vscode)
+plugins=(git aliases vscode)
 
 zstyle ':omz:update' mode disabled
 ZSH_DISABLE_COMPFIX=true
