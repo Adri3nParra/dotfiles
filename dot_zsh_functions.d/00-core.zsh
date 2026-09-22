@@ -32,19 +32,25 @@ _valid_port() {
 reminder() {
   local filter="${1:-}"
   local cat="${2:-}"
+  # Declarees ici et pas dans la boucle : `local var` sans affectation affiche
+  # la variable quand elle existe deja dans la portee, ce qui polluait la sortie
+  # d'une ligne `desc=...` / `usage=...` a chaque entree. Les variables de
+  # boucle etaient par ailleurs laissees globales.
+  local section fn heading desc usage
 
   local -A sections
-  sections[kubernetes]="kexec klogs kforward kdebug kdecode"
+  sections[kubernetes]="kexec klogs kforward kdebug kdecode kevents ktriage kyaml kcapacity"
   sections[réseau]="tcpcheck portscan httpcheck listening waittcp waithttp tlscheck dnscheck"
   sections[git]="gbf glogf gstats gwt gurl"
   sections[fichiers]="ff fcd mkcd croot extract tmpcd"
   sections[processus]="fkill topcpu topmem"
-  sections[divers]="retry json path venv serve epoch genpass b64enc b64dec sysinfo meteo reload"
+  sections[cloud]="tfclean imgtags"
+  sections[divers]="retry json path venv serve epoch genpass b64enc b64dec jwt sysinfo meteo reload"
 
   # Un nom de catégorie seul est accepté : `reminder kubernetes`.
   if [[ -z "$cat" ]]; then
     case "$filter" in
-      kubernetes | git | réseau | fichiers | processus | divers)
+      kubernetes | git | réseau | fichiers | processus | cloud | divers)
         cat="$filter"
         filter=""
         ;;
@@ -53,14 +59,13 @@ reminder() {
 
   local found=false
   echo ""
-  for section in kubernetes git réseau fichiers processus divers; do
+  for section in kubernetes git réseau fichiers processus cloud divers; do
     [[ -n "$cat" && "$cat" != "$section" ]] && continue
-    local heading=false
+    heading=false
     for fn in ${(z)sections[$section]}; do
       [[ -n "$filter" && "$fn" != *"$filter"* ]] && continue
 
       local -a help_parts=()
-      local desc usage
       help_parts=("${(@f)$(
         functions "$fn" 2>/dev/null |
           sed -n '/_usage/ {p;q;}' |
