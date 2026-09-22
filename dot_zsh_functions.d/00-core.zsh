@@ -39,13 +39,12 @@ reminder() {
   local section fn heading desc usage
 
   local -A sections
-  sections[kubernetes]="kexec klogs kforward kdebug kdecode kevents ktriage kyaml kcapacity"
+  sections[kubernetes]="kexec klogs kforward kdebug kdecode"
   sections[réseau]="tcpcheck portscan httpcheck listening waittcp waithttp tlscheck dnscheck"
   sections[git]="gbf glogf gstats gwt gurl"
   sections[fichiers]="ff fcd mkcd croot extract tmpcd"
   sections[processus]="fkill topcpu topmem"
-  sections[cloud]="tfclean imgtags"
-  sections[divers]="retry json path venv serve epoch genpass b64enc b64dec jwt sysinfo meteo reload"
+  sections[divers]="retry json path venv serve epoch genpass b64enc b64dec sysinfo meteo reload"
 
   # Un nom de catégorie seul est accepté : `reminder kubernetes`.
   if [[ -z "$cat" ]]; then
